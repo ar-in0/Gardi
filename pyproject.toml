@@ -3,15 +3,14 @@ name = "gardi"
 version = "1.0.0"
 description = "Railway Timetable Visualization+Analysis"
 authors = [{name = "Armaan Chowfin", email = "rmhspace@gmail.com"}]
-dependencies = [
-    "dash>=2.14.0",
-    "plotly>=5.18.0",
-    "pandas>=2.1.0",
-    "openpyxl>=3.1.2",
-]
+
+dependencies = []
 
 [project.scripts]
 gardi = "gardi.__main__:main" # run from cli via `gardi`
+
+[tool.setuptools.packages.find]
+include = ["gardi*"]
 
 # for pip install
 [build-system]
