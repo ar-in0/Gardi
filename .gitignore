@@ -1,2 +1,6 @@
 refactor-guide.md
 data
+*-venv
+__pycache__/
+*.egg-info/
+*old
