@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-from gardi.core.parser import TimeTableParser
-
 
 class RakeOperations:
     def convert_to_ac(self, wtt, link_names):
@@ -39,7 +37,7 @@ class RakeOperations:
 
         return {"converted": len(converted), "links": converted}
 
-    def detect_gaps(self, wtt, size_minutes, stations, time_range):
+    def detect_gaps(self, wtt, size_minutes, stations, time_range, events_by_station_map):
         """
         Finds service gaps > threshold at stations.
 
@@ -48,12 +46,13 @@ class RakeOperations:
             size_minutes: Gap threshold in minutes
             stations: List of station names
             time_range: Tuple (t_lower, t_upper) in minutes
+            events_by_station_map: Dict mapping station names to event lists
         """
         print(f"# Gaps > {size_minutes} minutes:")
         t_lower, t_upper = time_range
 
         for stn in stations:
-            events = TimeTableParser.eventsByStationMap.get(stn, [])
+            events = events_by_station_map.get(stn, [])
             if not events:
                 print(f"{stn}: 0")
                 continue

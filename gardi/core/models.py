@@ -79,6 +79,16 @@ DISTANCE_MAP = {
 }
 
 
+def normalize_station_name(name: str) -> str:
+    """Normalize known station name inconsistencies in WTT data."""
+    name = str(name).strip()
+    if name == "M'BAI CENTRAL (L)":
+        name = "M'BAI CENTRAL(L)"
+    if name.upper() == "KANDIVLI":
+        name = "KANDIVALI"
+    return name
+
+
 class TimeTable:
     def __init__(self):
         # ground truth
@@ -193,7 +203,8 @@ class TimeTable:
 
         allServices = {str(s.serviceId[0]): s for s in self.suburbanServices}
         s = allServices.get(str(sid))
-        assert(s)
+        if not s:
+            raise ValueError(f"Service {sid} not found for link {linkName}")
 
         if any(str(sid) == str(sv.linkedTo) for sv in allServices.values()):
             logger.debug(f"Service {sid} appears as a linkedTo of another service in WTT. Possible mislink in rakecycle {linkName}.")
@@ -201,15 +212,13 @@ class TimeTable:
             path = []
             for id in rc.serviceIds:
                 svc = allServices.get(str(id))
-                assert(svc)
+                if not svc:
+                    raise ValueError(f"Service {id} not found for link {linkName}")
                 path.append(svc)
             return path
 
     # creates stationEvents
-    def generateRakeCycles(self):
-        # Import here to avoid circular import at module level
-        from gardi.core.parser import TimeTableParser
-
+    def generateRakeCycles(self, parser):
         self.suburbanServices.sort(
             key=lambda sv: (
                 isinstance(sv.serviceId[0], int),
@@ -252,8 +261,9 @@ class TimeTable:
                 pass
             for svc in rc.servicePath:
                 rcRawServiceCols.append(svc.rawServiceCol)
-                svc.generateStationEvents()
-                assert(svc.events)
+                svc.generateStationEvents(parser)
+                if not svc.events:
+                    raise ValueError(f"Service {svc.serviceId} has no events")
                 svc.initStation = self.stations[svc.events[0].atStation]
                 svc.finalStation = self.stations[svc.events[-1].atStation]
 
@@ -392,9 +402,9 @@ class Service:
 
         if first == start:
             if not (t_lower <= t_first <= t_upper):
-                self.render = self.render and False
+                self.render = False
         else:
-            self.render = self.render and False
+            self.render = False
 
     def checkEndStationConstraint(self, qq):
         if not qq.endStation:
@@ -407,9 +417,9 @@ class Service:
 
         if last == end:
             if not (t_lower <= t_last <= t_upper):
-                self.render = self.render and False
+                self.render = False
         else:
-            self.render = self.render and False
+            self.render = False
 
     def checkDirectionConstraint(self, qq):
         dir = qq.inDirection
@@ -426,7 +436,7 @@ class Service:
                 break
 
         if not dirMatch:
-            self.render = self.render and False
+            self.render = False
 
     def checkACConstraint(self, qq):
         mode = qq.ac
@@ -434,9 +444,9 @@ class Service:
             return
 
         if mode == "ac" and not self.needsACRake:
-            self.render = self.render and False
+            self.render = False
         elif mode == "nonac" and self.needsACRake:
-            self.render = self.render and False
+            self.render = False
 
     def checkPassingThroughConstraint(self, qq):
         qPassingStns = [s.upper() for s in qq.passingThrough] if qq.passingThrough else []
@@ -451,13 +461,13 @@ class Service:
 
         for st in qPassingStns:
             if st not in stnMapTimes:
-                self.render = self.render and False
+                self.render = False
                 return
 
             t = stnMapTimes[st][-1]
             t_lower, t_upper = qq.inTimePeriod
             if not (t_lower <= t <= t_upper):
-                self.render = self.render and False
+                self.render = False
                 return
 
     def computeLengthKm(self):
@@ -471,20 +481,17 @@ class Service:
             dprev = dCCGKm
         self.lengthKm = l
 
-    def generateStationEvents(self):
-        # Import here to avoid circular import at module level
-        from gardi.core.parser import TimeTableParser
-
+    def generateStationEvents(self, parser):
         sheet = None
         if self.direction == Direction.UP:
-            sheet = TimeTableParser.wttSheets[0]
+            sheet = parser.wttSheets[0]
         else:
-            sheet = TimeTableParser.wttSheets[1]
+            sheet = parser.wttSheets[1]
 
         stName = None
         serviceCol = self.rawServiceCol
         for rowIdx, cell in serviceCol.items():
-            match = TimeTableParser.rTimePattern.search(str(cell))
+            match = parser.rTimePattern.search(str(cell))
             if match:
                 tCell = match.group(0)
                 stName= sheet.iat[rowIdx, 0]
@@ -492,12 +499,9 @@ class Service:
                     stName = sheet.iat[rowIdx - 1, 0]
                     if pd.isna(stName) or not str(stName).strip():
                         stName = sheet.iat[rowIdx - 2, 0]
-                if str(stName).strip() == "M'BAI CENTRAL (L)":
-                    stName = "M'BAI CENTRAL(L)"
-                if str(stName).strip().upper() == "KANDIVLI":
-                    stName = "KANDIVALI"
-                if str(stName).strip() in TimeTableParser.stations.keys():
-                    station = TimeTableParser.stations[str(stName).strip()]
+                stName = normalize_station_name(stName)
+                if str(stName).strip() in parser.stations.keys():
+                    station = parser.stations[str(stName).strip()]
                 elif "REVERSED" in str(stName).upper():
                     stName= sheet.iat[rowIdx - 1, 0]
                     if pd.isna(stName) or not str(stName).strip():
@@ -514,20 +518,20 @@ class Service:
                     e1 = StationEvent(stName, self, tArr, EventType.ARRIVAL)
                     isDTime = True if sheet.iat[rowIdx+1, 1] == "D" else False
                     self.events.append(e1)
-                    TimeTableParser.eventsByStationMap[stName].append(e1)
+                    parser.eventsByStationMap[stName].append(e1)
                     if isDTime:
                         tDep = str(serviceCol.iloc[rowIdx + 1]).strip()
-                        if TimeTableParser.rTimePattern.match(tDep):
+                        if parser.rTimePattern.match(tDep):
                             e2 = StationEvent(stName, self, tDep, EventType.DEPARTURE)
                             self.events.append(e2)
-                            TimeTableParser.eventsByStationMap[stName].append(e2)
+                            parser.eventsByStationMap[stName].append(e2)
                     else:
                         pass
                 else:
                     time = str(tCell).strip()
                     e = StationEvent(stName, self, time, EventType.ARRIVAL)
                     self.events.append(e)
-                    TimeTableParser.eventsByStationMap[stName].append(e)
+                    parser.eventsByStationMap[stName].append(e)
 
     def __repr__(self):
         sid = ','.join(str(s) for s in self.serviceId) if self.serviceId else 'None'
@@ -563,10 +567,10 @@ class StationEvent:
             return None
         try:
             t = datetime.strptime(time_str.strip(), "%H:%M:%S")
-        except:
+        except ValueError:
             try:
                 t = datetime.strptime(time_str.strip(), "%H:%M")
-            except:
+            except ValueError:
                 return None
 
         minutes = t.hour * 60 + t.minute + t.second / 60

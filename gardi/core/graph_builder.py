@@ -22,11 +22,11 @@ class GraphBuilder:
         z_labels = []
         z_offset = 0
 
-        # Check if we're filtering by service (granular) or rake link (coarse)
+        # filter mmode
         is_service_filter = query.type == FilterType.SERVICE
 
         for rc in rakecycles:
-            # --- SERVICE FILTER MODE: Only render filtered services ---
+            # svc mode: Only render filtered services
             if is_service_filter:
                 for svc in rc.servicePath:
                     if not svc.render:
@@ -47,14 +47,14 @@ class GraphBuilder:
                         z_in.append(z_offset)
                         labels_in.append(stName)
 
-                    # Format service IDs for display
+                    # Format sids
                     svc_id_str = (
                         ",".join(str(sid) for sid in svc.serviceId)
                         if svc.serviceId
                         else "?"
                     )
 
-                    # Create trace for OUT-OF-RANGE events (dimmed, background context)
+                    # dim out-of-range events
                     if x_out:
                         color_dim = (
                             "rgba(66,133,244,0.6)"
@@ -81,7 +81,7 @@ class GraphBuilder:
                             )
                         )
 
-                    # Create trace for IN-RANGE events (prominent, filtered results)
+                    # render in-range events
                     if x_in:
                         color_bright = (
                             "rgba(66,133,244,0.8)"
@@ -114,7 +114,7 @@ class GraphBuilder:
                     if x_in or x_out:
                         z_offset += 40
 
-            # RAKELINK mode
+            # rakelink mode
             else:
                 if not rc.render:
                     continue
@@ -124,7 +124,7 @@ class GraphBuilder:
                 elif query.type == FilterType.RAKELINK:
                     mode = "lines+markers"
 
-                # Aggregate all services in the rake cycle into a single trace
+                # enumerate rakelink events
                 x, y, z, stationLabels = [], [], [], []
 
                 for svc in rc.servicePath:
@@ -148,7 +148,7 @@ class GraphBuilder:
                         z.append(z_offset)
                         stationLabels.append(stName)
 
-                # Create single trace for entire rake cycle
+                # rakelink trace
                 if x:
                     color = (
                         "rgba(66,133,244,0.8)" if rc.rake.isAC else "rgba(90,90,90,0.8)"
@@ -235,7 +235,7 @@ class GraphBuilder:
 
         return fig
 
-    def post_process_station_mode(self, fig, query, wtt):
+    def post_process_station_mode(self, fig, query, wtt, parser):
         if query.type != FilterType.STATION:
             return fig
 
@@ -250,10 +250,12 @@ class GraphBuilder:
                     svc.needsACRake = True
 
         before = utils.corridorMixingMinimal(
-            query.startStation, query.endStation, query.inTimePeriod[0], query.inTimePeriod[1]
+            query.startStation, query.endStation, query.inTimePeriod[0], query.inTimePeriod[1],
+            parser.eventsByStationMap, parser.distanceMap
         )
         after = utils.corridorMixingMinimal(
-            query.startStation, query.endStation, query.inTimePeriod[0], query.inTimePeriod[1]
+            query.startStation, query.endStation, query.inTimePeriod[0], query.inTimePeriod[1],
+            parser.eventsByStationMap, parser.distanceMap
         )
 
         print("=== Mixing Report ===")

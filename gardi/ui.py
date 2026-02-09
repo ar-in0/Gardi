@@ -7,14 +7,7 @@ from dash import Dash, html, dcc, Input, Output, State, callback_context
 from dash import dash_table
 import dash_bootstrap_components as dbc
 
-
-def fmt_time(t):
-    """Format time in minutes to HH:MM string"""
-    if t is None:
-        return "--:--"
-    t = int(round(t))
-
-    return f"{t//60:02d}:{t%60:02d}"
+from gardi.core.data_builder import fmt_time, make_summary_card
 
 
 def visualization_layout(graph_ready):
@@ -28,58 +21,6 @@ def visualization_layout(graph_ready):
 def service_details_layout():
     """Placeholder for service details"""
     return html.Div("...", style={"padding": "20px"})
-
-
-def make_summary_card(title, items, footer=None):
-    """Reusable helper to build a clean, minimal summary card."""
-    return dbc.Card(
-        [
-            dbc.CardHeader(
-                html.Strong(title, style={"fontSize": "14px", "color": "#1e293b"}),
-                style={
-                    "backgroundColor": "#f8fafc",
-                    "borderBottom": "1px solid #e2e8f0",
-                    "padding": "6px 10px",
-                },
-            ),
-            dbc.CardBody(
-                [
-                    html.Ul(
-                        [html.Li(i, style={"marginBottom": "4px"}) for i in items],
-                        style={
-                            "paddingLeft": "18px",
-                            "margin": "0",
-                            "fontSize": "13px",
-                            "color": "#334155",
-                            "listStyleType": "disc",
-                        },
-                    )
-                ],
-                style={"padding": "10px 12px"},
-            ),
-            (
-                dbc.CardFooter(
-                    footer if footer else "",
-                    style={
-                        "backgroundColor": "#fafafa",
-                        "borderTop": "1px solid #e2e8f0",
-                        "fontSize": "12px",
-                        "color": "#64748b",
-                        "padding": "6px 10px",
-                    },
-                )
-                if footer
-                else None
-            ),
-        ],
-        style={
-            "borderRadius": "8px",
-            "border": "1px solid #e2e8f0",
-            "boxShadow": "0 1px 2px rgba(0,0,0,0.04)",
-            "backgroundColor": "white",
-            "height": "100%",
-        },
-    )
 
 
 def build_service_row(svc, draw_connector):
@@ -813,6 +754,7 @@ class GardiUI:
             [
                 dcc.Store(id="rl-table-store"),
                 dcc.Store(id="app-state"),
+                dcc.Store(id="backend-ready", data=False),
                 self.drawLeftSidebar(),
                 self.drawRightPanel(),
             ],

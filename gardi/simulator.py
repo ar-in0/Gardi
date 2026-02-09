@@ -4,7 +4,6 @@ import os
 import dash
 import io
 import base64
-import copy
 import plotly.graph_objs as go
 
 from dash import dcc, html, Input, Output, State, callback_context
@@ -37,189 +36,95 @@ class Simulator:
         self._init_filter_query_callbacks()
         self._init_button_callbacks()
 
+    def _make_upload_callback(self, component_id, label, contents_attr, filename_attr):
+        @self.app.callback(
+            Output(component_id, "children"),
+            Output(component_id, "style"),
+            Input(component_id, "contents"),
+            State(component_id, "filename"),
+        )
+        def update_filename(contents, filename):
+            base_style = {
+                "height": "140px",
+                "borderWidth": "2px",
+                "borderStyle": "dashed",
+                "borderRadius": "12px",
+                "borderColor": "#cbd5e1",
+                "display": "flex",
+                "alignItems": "center",
+                "justifyContent": "center",
+                "cursor": "pointer",
+                "transition": "all 0.2s ease",
+            }
+            if contents is None:
+                return (
+                    html.Div(
+                        [
+                            html.Img(
+                                src="/assets/excel-icon.png",
+                                style={
+                                    "width": "28px",
+                                    "height": "28px",
+                                    "marginBottom": "6px",
+                                },
+                            ),
+                            html.Div(
+                                label,
+                                style={
+                                    "fontWeight": "500",
+                                    "color": "#334155",
+                                    "fontSize": "14px",
+                                },
+                            ),
+                            html.Div(
+                                "Click to upload",
+                                style={
+                                    "fontSize": "11px",
+                                    "color": "#94a3b8",
+                                    "marginTop": "4px",
+                                },
+                            ),
+                        ],
+                        className="text-center",
+                    ),
+                    base_style,
+                )
+
+            setattr(self.gardi, contents_attr, contents)
+            setattr(self.gardi, filename_attr, filename)
+            display_name = filename if len(filename) <= 40 else filename[:37] + "..."
+
+            success_style = {**base_style, "borderStyle": "solid", "borderColor": "#188038"}
+
+            return (
+                html.Div(
+                    [
+                        html.Img(
+                            src="/assets/excel-icon.png",
+                            style={
+                                "width": "24px",
+                                "height": "24px",
+                                "marginBottom": "4px",
+                            },
+                        ),
+                        html.Div(
+                            display_name,
+                            style={
+                                "fontSize": "11px",
+                                "color": "#188038",
+                                "fontWeight": "500",
+                                "wordBreak": "break-all",
+                            },
+                        ),
+                    ],
+                    className="text-center",
+                ),
+                success_style,
+            )
+
     def _init_file_upload_callbacks(self):
-
-        @self.app.callback(
-            Output("upload-wtt-inline", "children"),
-            Output("upload-wtt-inline", "style"),
-            Input("upload-wtt-inline", "contents"),
-            State("upload-wtt-inline", "filename"),
-        )
-        def update_wtt_filename(contents, filename):
-            base_style = {
-                "height": "140px",
-                "borderWidth": "2px",
-                "borderStyle": "dashed",
-                "borderRadius": "12px",
-                "borderColor": "#cbd5e1",
-                "display": "flex",
-                "alignItems": "center",
-                "justifyContent": "center",
-                "cursor": "pointer",
-                "transition": "all 0.2s ease",
-            }
-            if contents is None:
-                return (
-                    html.Div(
-                        [
-                            html.Img(
-                                src="/assets/excel-icon.png",
-                                style={
-                                    "width": "28px",
-                                    "height": "28px",
-                                    "marginBottom": "6px",
-                                },
-                            ),
-                            html.Div(
-                                "Full WTT",
-                                style={
-                                    "fontWeight": "500",
-                                    "color": "#334155",
-                                    "fontSize": "14px",
-                                },
-                            ),
-                            html.Div(
-                                "Click to upload",
-                                style={
-                                    "fontSize": "11px",
-                                    "color": "#94a3b8",
-                                    "marginTop": "4px",
-                                },
-                            ),
-                        ],
-                        className="text-center",
-                    ),
-                    base_style,
-                )
-
-            self.gardi.wttContents = contents
-            self.gardi.wttFileName = filename
-            display_name = filename if len(filename) <= 40 else filename[:37] + "..."
-
-            success_style = copy.deepcopy(base_style)
-            success_style.update(
-                {
-                    "borderStyle": "solid",
-                    "borderColor": "#188038",
-                }
-            )
-
-            return (
-                html.Div(
-                    [
-                        html.Img(
-                            src="/assets/excel-icon.png",
-                            style={
-                                "width": "24px",
-                                "height": "24px",
-                                "marginBottom": "4px",
-                            },
-                        ),
-                        html.Div(
-                            display_name,
-                            style={
-                                "fontSize": "11px",
-                                "color": "#188038",
-                                "fontWeight": "500",
-                                "wordBreak": "break-all",
-                            },
-                        ),
-                    ],
-                    className="text-center",
-                ),
-                success_style,
-            )
-
-        @self.app.callback(
-            Output("upload-summary-inline", "children"),
-            Output("upload-summary-inline", "style"),
-            Input("upload-summary-inline", "contents"),
-            State("upload-summary-inline", "filename"),
-        )
-        def update_summary_filename(contents, filename):
-            base_style = {
-                "height": "140px",
-                "borderWidth": "2px",
-                "borderStyle": "dashed",
-                "borderRadius": "12px",
-                "borderColor": "#cbd5e1",
-                "display": "flex",
-                "alignItems": "center",
-                "justifyContent": "center",
-                "cursor": "pointer",
-                "transition": "all 0.2s ease",
-            }
-            if contents is None:
-                return (
-                    html.Div(
-                        [
-                            html.Img(
-                                src="/assets/excel-icon.png",
-                                style={
-                                    "width": "28px",
-                                    "height": "28px",
-                                    "marginBottom": "6px",
-                                },
-                            ),
-                            html.Div(
-                                "WTT Link Summary",
-                                style={
-                                    "fontWeight": "500",
-                                    "color": "#334155",
-                                    "fontSize": "14px",
-                                },
-                            ),
-                            html.Div(
-                                "Click to upload",
-                                style={
-                                    "fontSize": "11px",
-                                    "color": "#94a3b8",
-                                    "marginTop": "4px",
-                                },
-                            ),
-                        ],
-                        className="text-center",
-                    ),
-                    base_style,
-                )
-
-            self.gardi.summaryContents = contents
-            self.gardi.summaryFileName = filename
-            display_name = filename if len(filename) <= 40 else filename[:37] + "..."
-
-            success_style = copy.deepcopy(base_style)
-            success_style.update(
-                {
-                    "borderStyle": "solid",
-                    "borderColor": "#188038",
-                }
-            )
-
-            return (
-                html.Div(
-                    [
-                        html.Img(
-                            src="/assets/excel-icon.png",
-                            style={
-                                "width": "24px",
-                                "height": "24px",
-                                "marginBottom": "4px",
-                            },
-                        ),
-                        html.Div(
-                            display_name,
-                            style={
-                                "fontSize": "11px",
-                                "color": "#188038",
-                                "fontWeight": "500",
-                                "wordBreak": "break-all",
-                            },
-                        ),
-                    ],
-                    className="text-center",
-                ),
-                success_style,
-            )
+        self._make_upload_callback("upload-wtt-inline", "Full WTT", "wttContents", "wttFileName")
+        self._make_upload_callback("upload-summary-inline", "WTT Link Summary", "summaryContents", "summaryFileName")
 
         @self.app.callback(
             Output("generate-button", "disabled"),
@@ -227,9 +132,10 @@ class Simulator:
             [
                 Input("upload-wtt-inline", "contents"),
                 Input("upload-summary-inline", "contents"),
+                Input("backend-ready", "data"),
             ],
         )
-        def enable_generate_button(wtt_contents, summary_contents):
+        def enable_generate_button(wtt_contents, summary_contents, backend_ready):
             base_style = {
                 "border": "none",
                 "width": "100%",
@@ -241,7 +147,7 @@ class Simulator:
                 "transition": "all 0.2s ease",
             }
 
-            if wtt_contents is not None and summary_contents is not None:
+            if wtt_contents is not None and summary_contents is not None and backend_ready:
                 enabled_style = base_style | {"opacity": "1"}
                 return False, enabled_style
             else:
@@ -313,6 +219,7 @@ class Simulator:
             )
 
         @self.app.callback(
+            Output("backend-ready", "data"),
             [
                 Input("upload-wtt-inline", "contents"),
                 Input("upload-summary-inline", "contents"),
@@ -320,8 +227,8 @@ class Simulator:
             prevent_initial_call=True,
         )
         def init_backend(wttContents, summaryContents):
-            if wttContents is None and summaryContents is None:
-                return
+            if wttContents is None or summaryContents is None:
+                return False
 
             if not (
                 self.gardi.is_valid_xlsx(self.gardi.wttFileName)
@@ -333,9 +240,10 @@ class Simulator:
                 summaryDecoded = base64.b64decode(summaryContents.split(",")[1])
                 summaryIO = io.BytesIO(summaryDecoded)
                 self.gardi.initialize_backend(summaryIO)
+                return True
             except Exception as e:
                 print(f"Error initializing backend: {e}")
-                return
+                return False
 
     def _init_filter_query_callbacks(self):
 

@@ -59,7 +59,7 @@ class Gardi:
 
         # First-time backend build
         if not self.linkTimingsCreated:
-            self.parser.wtt.generateRakeCycles()
+            self.parser.wtt.generateRakeCycles(self.parser)
             self.parser.wtt.storeOriginalACStates()
             self.linkTimingsCreated = True
         else:
@@ -73,7 +73,7 @@ class Gardi:
         fig = self.graph_builder.build_figure(self.parser.wtt, qq)
 
         # Station mode post-processing
-        fig = self.graph_builder.post_process_station_mode(fig, qq, self.parser.wtt)
+        fig = self.graph_builder.post_process_station_mode(fig, qq, self.parser.wtt, self.parser)
 
         # Re-apply highlighting if there were selections
         if qq.selectedLinks:

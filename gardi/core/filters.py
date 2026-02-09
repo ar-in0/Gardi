@@ -15,7 +15,6 @@ class FilterType(Enum):
 class FilterQuery:
     type: Optional[FilterType] = None
 
-    # Make fields mode-specific (no properties needed)
     startStation: Optional[str] = None
     endStation: Optional[str] = None
     passingThrough: List[str] = field(default_factory=list)
@@ -70,9 +69,9 @@ class FilterEngine:
             last = rc.servicePath[-1].events[-1].atStation
 
             if start and start.upper() != first:
-                rc.render = rc.render and False
+                rc.render = False
             if end and end.upper() != last:
-                rc.render = rc.render and False
+                rc.render = False
 
     def _apply_passing_through_filter(self, wtt, qq):
         """Make rakecycles visible that have events at every station in passingThru within the specified timeperiod"""
@@ -85,9 +84,8 @@ class FilterEngine:
         t_start, t_end = qq.inTimePeriod if qq.inTimePeriod else (None, None)
 
         for rc in wtt.rakecycles:
-            rc.render = rc.render and True
             if not rc.servicePath:
-                rc.render = rc.render and False
+                rc.render = False
                 continue
 
             # flatten all events in this rakecycle
@@ -182,7 +180,7 @@ class FilterEngine:
         for svc in wtt.suburbanServices:
             svc.render = True
 
-            # FIX: Check if events exist before accessing
+            # check if events exist before accessing
             if not svc.events:
                 svc.render = False
                 continue
@@ -190,7 +188,7 @@ class FilterEngine:
             for ev in svc.events:
                 ev.render = True
 
-                # FIX: Check if atTime exists
+                # check if atTime exists
                 if ev.atTime is None:
                     ev.render = False
                     continue

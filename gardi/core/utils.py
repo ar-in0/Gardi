@@ -1,7 +1,5 @@
 # utils.py — AC/NAC mixing analysis helpers
 
-from gardi.core.parser import TimeTableParser
-
 # event + sequence helpers
 
 def getCorridorStations(start, end, distanceMap):
@@ -23,11 +21,11 @@ def getCorridorStations(start, end, distanceMap):
     return stations[i_end:i_start + 1][::-1]
 
 
-def getStationEvents(station, t_lower, t_upper):
+def getStationEvents(station, t_lower, t_upper, events_by_station_map):
     '''
     Return station events in [t_lower, t_upper], sorted by atTime.
     '''
-    events = TimeTableParser.eventsByStationMap.get(station, [])
+    events = events_by_station_map.get(station, [])
     evs = [e for e in events if e.atTime is not None and t_lower <= e.atTime <= t_upper]
     evs.sort(key=lambda e: e.atTime)
     return evs
@@ -190,16 +188,16 @@ def analyzeSequence(seq):
 
 # reporting helpers
 
-def stationMixingReport(station, t_lower, t_upper):
+def stationMixingReport(station, t_lower, t_upper, events_by_station_map, distance_map):
     '''
     Compute full mixing report for a station in the given time window.
     Returns a list of per-station metric dicts across the ANDHERI->CHURCHGATE corridor.
     '''
-    stations = getCorridorStations('ANDHERI', 'CHURCHGATE', TimeTableParser.distanceMap)
+    stations = getCorridorStations('ANDHERI', 'CHURCHGATE', distance_map)
     metricslist = []
 
     for st in stations:
-        events = getStationEvents(st, t_lower, t_upper)
+        events = getStationEvents(st, t_lower, t_upper, events_by_station_map)
         seq = getStationSequence(events)
         metrics = analyzeSequence(seq)
 
@@ -226,7 +224,7 @@ def stationMixingReport(station, t_lower, t_upper):
     return metricslist
 
 
-def corridorMixingMinimal(start_station, end_station, t_lower, t_upper):
+def corridorMixingMinimal(start_station, end_station, t_lower, t_upper, events_by_station_map, distance_map):
     '''
     Return a minimal mixing report for corridor analysis:
     per-station mixing_score, alternation_ratio, ideal_alternation_ratio.
@@ -235,12 +233,11 @@ def corridorMixingMinimal(start_station, end_station, t_lower, t_upper):
         start_station = 'ANDHERI'
         end_station = 'CHURCHGATE'
 
-    distanceMap = TimeTableParser.distanceMap
-    stations = getCorridorStations(start_station, end_station, distanceMap)
+    stations = getCorridorStations(start_station, end_station, distance_map)
     result = []
 
     for s in stations:
-        events = getStationEvents(s, t_lower, t_upper)
+        events = getStationEvents(s, t_lower, t_upper, events_by_station_map)
         seq = getStationSequence(events)
         m = analyzeSequence(seq)
 

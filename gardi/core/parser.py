@@ -8,7 +8,7 @@ from collections import defaultdict
 from gardi.core.models import (
     TimeTable, RakeCycle, Service, Station,
     RakeLinkStatus, ServiceType, ServiceZone, Direction, Day, Line,
-    DISTANCE_MAP, SERVICE_ID_LEN
+    DISTANCE_MAP, SERVICE_ID_LEN, normalize_station_name
 )
 
 class TimeTableParser:
@@ -21,26 +21,17 @@ class TimeTableParser:
     rLinkNamePattern = re.compile(r'^\s*([A-Z]{1,2})\s*(?:\u2020)?\s*$', re.UNICODE) # only match A AK with dagger, i.e. start links
     rEtyPattern = re.compile(r'\bETY\s*\d+\b', re.IGNORECASE)
 
-    # extracted from the WTT parse
-    # Finally need store a single source of truth
-    # from both the summary and the WTT, so hopefully both match.
-    # @290ct: not used
-    rakeLinkNames = []
-
-    wttSheets = [] # upsheet, downsheet, summary sheets
-
-    # Keep distanceMap as class attribute for backwards compat (references DISTANCE_MAP)
+    # Keep distanceMap as class attribute (immutable reference)
     distanceMap = DISTANCE_MAP
-
-    eventsByStationMap = defaultdict(list)
-
-    # stations class-level variable (populated by registerStations)
-    stations = {}
-    stationMap = {}
 
     def __init__(self, fpWttXlsx=None, fpWttSummaryXlsx=None):
         self.wtt = TimeTable()
         self.stationCol = None # df column with stations
+
+        self.wttSheets = []
+        self.eventsByStationMap = defaultdict(list)
+        self.stations = {}
+        self.stationMap = {}
 
         # if the req comes from a local test
         # i.e. python3 timetable.py
@@ -81,10 +72,10 @@ class TimeTableParser:
         xlsx = pd.ExcelFile(fileObj)
         for sheet in xlsx.sheet_names:
             df = xlsx.parse(sheet, skiprows=4).dropna(axis=1, how='all')
-            TimeTableParser.wttSheets.append(df)
+            self.wttSheets.append(df)
 
-        self.upSheet = TimeTableParser.wttSheets[0]
-        self.downSheet = TimeTableParser.wttSheets[1]
+        self.upSheet = self.wttSheets[0]
+        self.downSheet = self.wttSheets[1]
 
     def parseWttSummaryFromFileObj(self, fileObj):
         '''Parse summary Excel from file object instead of path'''
@@ -174,7 +165,6 @@ class TimeTableParser:
 
             for sid, speed in service_entries:
                 rc.serviceIds.append(sid)
-                # Match with Service objects (casting to string for robust comparison)
                 service = next((s for s in allServices if str(sid) in str(s.serviceId)), None)
                 if service:
                     service.linkName = linkName
@@ -184,7 +174,7 @@ class TimeTableParser:
 
             self.wtt.rakecycles.append(rc)
 
-        # summary (Logic remains the same as your original)
+        # summary
         if 'rc' in locals() and rc.undefinedIds:
             print(f"\n{len(rc.undefinedIds)} service IDs from summary sheet not found in detailed WTT:")
             for linkName, sid in rc.undefinedIds:
@@ -205,11 +195,11 @@ class TimeTableParser:
             # First row is blank, followed by the station row # onwards
             # with skipped=4. skipped=5 removes the extra white row above the main content.
             df = xlsx.parse(sheet, skiprows=4).dropna(axis=1, how='all')
-            TimeTableParser.wttSheets.append(df)
+            self.wttSheets.append(df)
             # remove fully blank columns
 
-        self.upSheet = TimeTableParser.wttSheets[0]
-        self.downSheet = TimeTableParser.wttSheets[1]
+        self.upSheet = self.wttSheets[0]
+        self.downSheet = self.wttSheets[1]
 
     # always use cleancol before working with a column
     def cleanCol(self, sheet, colIdx):
@@ -240,7 +230,7 @@ class TimeTableParser:
             st.dCCGkm = DISTANCE_MAP[st.name]
 
         # create station map
-        TimeTableParser.stationMap = {
+        self.stationMap = {
             "BDTS": self.wtt.stations["BANDRA"],
             "BA": self.wtt.stations["BANDRA"],
             "MM": self.wtt.stations["MAHIM JN."],
@@ -256,7 +246,7 @@ class TimeTableParser:
             "MX": self.wtt.stations["MAHALAKSHMI"]
         }
 
-        TimeTableParser.stations = self.wtt.stations
+        self.stations = self.wtt.stations
 
     # First station with a valid time
     # "EX ..."
@@ -279,18 +269,15 @@ class TimeTableParser:
         if pd.isna(stationName) or not str(stationName).strip():
             raise ValueError(f"Invalid station name near row {rowIdx}")
 
-        if stationName == "M'BAI CENTRAL (L)":
-            stationName = "M'BAI CENTRAL(L)"
-
-        if stationName.upper() == "KANDIVLI":
-            stationName = "KANDIVALI"
+        stationName = normalize_station_name(stationName)
 
         station = self.wtt.stations[stationName.strip().upper()]
-        assert(station)
+        if not station:
+            raise ValueError(f"No station found for '{stationName}'")
         return station
 
     def extractFinalStation(self, serviceCol, sheet):
-        abbrStations = TimeTableParser.stationMap.keys()
+        abbrStations = self.stationMap.keys()
         station = None
         arrlRowIdx = None
 
@@ -311,10 +298,7 @@ class TimeTableParser:
                         stName = sheet.iat[rowIdx - 1, 0]
                         if pd.isna(stName) or not str(stName).strip():
                             stName = sheet.iat[rowIdx - 2, 0]
-                    if str(stName).strip() == "M'BAI CENTRAL (L)":
-                        stName = "M'BAI CENTRAL(L)"
-                    if str(stName).strip().upper() == "KANDIVLI":
-                        stName = "KANDIVALI"
+                    stName = normalize_station_name(stName)
                     if str(stName).strip() in self.wtt.stations.keys():
                         station = self.wtt.stations[str(stName).strip()]
                         return station
@@ -346,7 +330,7 @@ class TimeTableParser:
                     break
 
             if stationName:
-                station = TimeTableParser.stationMap[stationName]
+                station = self.stationMap[stationName]
                 return station
 
 
@@ -448,7 +432,8 @@ class TimeTableParser:
 
             if "CAR" in cell.upper():
                 match = re.search(r'(12|15|20|10)\s*CAR', cell, flags=re.IGNORECASE)
-                assert match is not None
+                if match is None:
+                    raise ValueError(f"Failed to extract rake size from '{cell}'")
                 rakeSize = int(match.group(1))
 
         return ids, rakeSize, zone, linkName
@@ -532,6 +517,6 @@ if __name__ == "__main__":
     wttSummaryPath = "/home/armaan/Fun-CS/IITB-RAILWAYS-2025/western-railways-simulator/LINK_SWTT_78_UPDATED_05.11.2024-4.xlsx"
     parsed = TimeTableParser(wttPath, wttSummaryPath)
 
-    parsed.wtt.generateRakeCycles()
+    parsed.wtt.generateRakeCycles(parsed)
 
     parsed.wtt.printStatistics()
