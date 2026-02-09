@@ -312,16 +312,6 @@ class Simulator:
             return None
 
         @self.app.callback(
-            Input("filter-tabs", "active_tab"),
-            State("time-range-slider", "value"),
-            State("time-range-slider_service", "value"),
-            State("time-range-slider_station", "value"),
-        )
-        def update_query_type(active_tab, rk_time, svc_time, st_time):
-            self.gardi.update_query_type_time(active_tab, rk_time, svc_time, st_time)
-            return None
-
-        @self.app.callback(
             Output("app-state", "data", allow_duplicate=True),
             Input("filter-tabs", "active_tab"),
             prevent_initial_call=True,
@@ -396,8 +386,8 @@ class Simulator:
                 if row["linkname"] in result["links"]:
                     row["is_ac"] = "AC"
 
-            # Regenerate visualization
-            fig = self.gardi.generate_visualization()
+            # Regenerate visualization (keep the AC conversion we just applied)
+            fig = self.gardi.generate_visualization(skip_ac_reset=True)
 
             status_msg = html.Div(
                 [

@@ -53,7 +53,7 @@ class Gardi:
         self.parser.parseWttSummaryFromFileObj(summary_file_obj)
         self.parser.wtt.suburbanServices = self.parser.isolateSuburbanServices()
 
-    def generate_visualization(self):
+    def generate_visualization(self, skip_ac_reset=False):
         """generate RC -> reset flags -> apply filters -> build figure -> post-process"""
         qq = self.query
 
@@ -62,7 +62,7 @@ class Gardi:
             self.parser.wtt.generateRakeCycles(self.parser)
             self.parser.wtt.storeOriginalACStates()
             self.linkTimingsCreated = True
-        else:
+        elif not skip_ac_reset:
             self.parser.wtt.resetACStates()
 
         # Reset + filter
@@ -144,18 +144,6 @@ class Gardi:
         self.query.passingThrough = saved.get("passingThrough", [])
         self.query.inTimePeriod = saved.get("inTimePeriod", (165, 1605))
         self.query.inDirection = saved.get("inDirection")
-
-    def update_query_type_time(self, active_tab, rk_time, svc_time, st_time):
-        if active_tab == "tab-rakelink":
-            self.query.type = FilterType.RAKELINK
-            self.query.inTimePeriod = rk_time
-            self.query.inDirection = None
-        elif active_tab == "tab-service":
-            self.query.type = FilterType.SERVICE
-            self.query.inTimePeriod = svc_time
-        elif active_tab == "tab-station":
-            self.query.type = FilterType.STATION
-            self.query.inTimePeriod = st_time
 
     def build_query_info_panel(self):
         if self.query.type == FilterType.RAKELINK:
