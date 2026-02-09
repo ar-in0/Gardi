@@ -107,7 +107,7 @@ class GardiUI:
             [
                 dcc.Markdown(
                     """
-                        ### Western Railways – Timetable Visualizer
+                        ## GARDI
                         """.replace(
                         "  ", ""
                     ),
@@ -115,7 +115,7 @@ class GardiUI:
                 ),
                 dcc.Markdown(
                     """
-                        Interactive tool to analyze rake-links during migration to AC.
+                        Timetable Visualization and Analysis
                         """.replace(
                         "  ", ""
                     ),
@@ -234,14 +234,14 @@ class GardiUI:
     def drawUploadFiles(self):
         return html.Div(
             [
-                html.Div(
-                    [
-                        dcc.Markdown(
-                            "##### Upload Required Files", className="subtitle"
-                        ),
-                    ],
-                    style={"padding": "8px 0px"},
-                ),
+                #html.Div(
+                #     [
+                #         dcc.Markdown(
+                #             "##### Upload Required Files", className="subtitle"
+                #         ),
+                #     ],
+                #     style={"padding": "8px 0px"},
+                # ),
                 dbc.Row(
                     [
                         self.drawUploadFullWTT(),

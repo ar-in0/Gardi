@@ -3,8 +3,10 @@ name = "gardi"
 version = "1.0.0"
 description = "Railway Timetable Visualization+Analysis"
 authors = [{name = "Armaan Chowfin", email = "rmhspace@gmail.com"}]
+dynamic = ["dependencies"]
 
-dependencies = []
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
 
 [project.scripts]
 gardi = "gardi.__main__:main" # run from cli via `gardi`
