@@ -25,97 +25,69 @@ class GraphBuilder:
         # filter mmode
         is_service_filter = query.type == FilterType.SERVICE
 
-        for rc in rakecycles:
-            # svc mode: Only render filtered services
-            if is_service_filter:
+        if is_service_filter:
+            # 2 traces: AC and non-AC
+            batches = {
+                True:  {"x": [], "y": [], "z": [], "hover": [], "custom": []},
+                False: {"x": [], "y": [], "z": [], "hover": [], "custom": []},
+            }
+
+            for rc in rakecycles:
                 for svc in rc.servicePath:
                     if not svc.render:
+                        z_offset += 40
                         continue
 
-                    x_in, y_in, z_in, labels_in = [], [], [], []
-                    x_out, y_out, z_out, labels_out = [], [], [], []
-
-                    for ev in svc.events:
-                        minutes = ev.atTime
-
-                        stName = str(ev.atStation).strip().upper()
-                        if stName not in stationToY:
-                            continue
-
-                        x_in.append(minutes)
-                        y_in.append(stationToY[stName])
-                        z_in.append(z_offset)
-                        labels_in.append(stName)
-
-                    # Format sids
                     svc_id_str = (
                         ",".join(str(sid) for sid in svc.serviceId)
                         if svc.serviceId
                         else "?"
                     )
+                    batch = batches[svc.needsACRake]
+                    has_points = False
 
-                    # dim out-of-range events
-                    if x_out:
-                        color_dim = (
-                            "rgba(66,133,244,0.6)"
-                            if svc.needsACRake
-                            else "rgba(90,90,90,0.6)"
+                    for ev in svc.events:
+                        stName = str(ev.atStation).strip().upper()
+                        if stName not in stationToY:
+                            continue
+                        batch["x"].append(ev.atTime)
+                        batch["y"].append(stationToY[stName])
+                        batch["z"].append(z_offset)
+                        batch["hover"].append(
+                            f"{rc.linkName}-{svc_id_str}: {stName} @ {(int(ev.atTime)//60) % 24:02d}:{int(ev.atTime%60):02d}"
                         )
+                        batch["custom"].append(svc_id_str)
+                        has_points = True
 
-                        all_traces.append(
-                            go.Scatter3d(
-                                x=x_out,
-                                y=y_out,
-                                z=z_out,
-                                mode="lines+markers",
-                                line=dict(color=color_dim),
-                                marker=dict(size=2, color=color_dim),
-                                hovertext=[
-                                    f"{svc_id_str}: {st} @ {(int(xx)//60) % 24:02d}:{int(xx%60):02d} (outside filter)"
-                                    for xx, st in zip(x_out, labels_out)
-                                ],
-                                hoverinfo="text",
-                                name=f"{rc.linkName}-{svc_id_str} (context)",
-                                showlegend=False,
-                                visible=True,
-                            )
-                        )
+                    # break line between services
+                    if has_points:
+                        batch["x"].append(None)
+                        batch["y"].append(None)
+                        batch["z"].append(None)
+                        batch["hover"].append(None)
+                        batch["custom"].append(None)
 
-                    # render in-range events
-                    if x_in:
-                        color_bright = (
-                            "rgba(66,133,244,0.8)"
-                            if svc.needsACRake
-                            else "rgba(90,90,90,0.8)"
-                        )
+                    z_labels.append((z_offset, f"{rc.linkName}-{svc_id_str}"))
+                    z_offset += 40
 
-                        all_traces.append(
-                            go.Scatter3d(
-                                x=x_in,
-                                y=y_in,
-                                z=z_in,
-                                mode="lines+markers",
-                                line=dict(color=color_bright),
-                                marker=dict(
-                                    size=2, color=color_bright
-                                ),
-                                hovertext=[
-                                    f"{svc_id_str}: {st} @ {(int(xx)//60) % 24:02d}:{int(xx%60):02d}"
-                                    for xx, st in zip(x_in, labels_in)
-                                ],
-                                hoverinfo="text",
-                                name=f"{rc.linkName}-{svc_id_str}",
-                                visible=True,
-                            )
-                        )
-                        z_labels.append((z_offset, f"{rc.linkName}-{svc_id_str}"))
+            for is_ac, b in batches.items():
+                if not any(v is not None for v in b["x"]):
+                    continue
+                color = "rgba(66,133,244,0.8)" if is_ac else "rgba(90,90,90,0.8)"
+                all_traces.append(go.Scatter3d(
+                    x=b["x"], y=b["y"], z=b["z"],
+                    mode="lines+markers",
+                    line=dict(color=color),
+                    marker=dict(size=2, color=color),
+                    hovertext=b["hover"],
+                    hoverinfo="text",
+                    customdata=b["custom"],
+                    name="AC Services" if is_ac else "Non-AC Services",
+                    visible=True,
+                ))
 
-                    # Only increment z if we rendered something
-                    if x_in or x_out:
-                        z_offset += 40
-
-            # rakelink mode
-            else:
+        else:
+            for rc in rakecycles:
                 if not rc.render:
                     continue
 
@@ -265,30 +237,18 @@ class GraphBuilder:
         return fig
 
     def highlight_services(self, fig, selected_services):
-        """
-        Highlight selected services in the visualization.
-
-        Args:
-            fig: Plotly figure object
-            selected_services: List of service ID strings (e.g., ["93001", "93002"])
-        """
         if not selected_services:
             return
 
         selected_set = set(selected_services)
 
         for trace in fig.data:
-            if "-" in trace.name:
-                trace_service = trace.name.split("-")[1]
-
-                if trace_service in selected_set:
-                    trace.opacity = 1.0
-                    if hasattr(trace, "marker"):
-                        trace.marker.size = 3
-                else:
-                    trace.opacity = 0.35
-                    if hasattr(trace, "marker"):
-                        trace.marker.size = 1
+            cd = trace.customdata
+            if cd is not None and len(cd) > 0:
+                sizes = [4 if c in selected_set else 1 for c in cd]
+                opacities = [1.0 if c in selected_set else 0.15 for c in cd]
+                trace.marker.size = sizes
+                trace.marker.opacity = opacities
             else:
                 trace.opacity = 0.35
 

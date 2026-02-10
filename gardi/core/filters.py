@@ -159,7 +159,7 @@ class FilterEngine:
             svc.checkStartStationConstraint(qq)
             svc.checkEndStationConstraint(qq)
             svc.checkPassingThroughConstraint(qq)
-            print(f"constraint checks done for {svc}")
+            # print(f"constraint checks done for {svc}")
 
         for rc in wtt.rakecycles:
             rc.render = False

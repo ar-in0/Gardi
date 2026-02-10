@@ -237,6 +237,7 @@ class TimeTable:
             for path in self.allCyclesWtt:
                 if str(rc.serviceIds[0]) == str(path[0].serviceId[0]):
                     rc.servicePath = path
+                    break
             if not rc.servicePath:
                 logger.debug(f"Link {rc.linkName}: Summ starts with: {str(rc.serviceIds[0])}, wtt starts with: {str(path[0].serviceId[0])}")
                 logger.warning(f"Unable to match rakelink {rc.linkName} to a wtt-derived service-path. Fixing...")
@@ -255,13 +256,7 @@ class TimeTable:
         logger.debug(f"After fixup and validation, we have {len(self.rakecycles)} consistent cycles.")
 
         for rc in self.rakecycles:
-            sPath = [svc.serviceId[0] for svc in rc.servicePath]
-            print(f"{rc.linkName}: {sPath}")
-            rcRawServiceCols = []
-            if not rc.servicePath:
-                pass
             for svc in rc.servicePath:
-                rcRawServiceCols.append(svc.rawServiceCol)
                 svc.generateStationEvents(parser)
                 if not svc.events:
                     raise ValueError(f"Service {svc.serviceId} has no events")
@@ -273,11 +268,6 @@ class TimeTable:
                 rc.lengthKm += svc.lengthKm
                 svc.computeDurationMinutes()
                 rc.durationMinutes += svc.durationMinutes
-            print("\n")
-            print(f"**Count = {len(sPath)}**")
-            df = pd.DataFrame(rcRawServiceCols).T
-            print(df.to_string())
-            print("\n\n\n")
         # assign rakes to rakecycles
         self.assignRakes()
 
@@ -392,14 +382,14 @@ class Service:
             return
 
         start = qq.startStation
-        print(self.events)
-        print(self)
+        # print(self.events)
+        # print(self)
         first = self.events[0].atStation
 
         t_first = self.events[0].atTime
         t_lower, t_upper = qq.inTimePeriod
-        print(first)
-        print(start)
+        # print(first)
+        # print(start)
 
         if first == start:
             if not (t_lower <= t_first <= t_upper):
