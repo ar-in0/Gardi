@@ -62,6 +62,7 @@ class Day(Enum):
 class Line(Enum):
     THROUGH = 'through/fast'
     LOCAL = 'local/slow'
+    UNKNOWN = 'unknown'
 
 class EventType(Enum):
     ARRIVAL = 'ARRIVAL',

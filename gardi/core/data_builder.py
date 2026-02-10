@@ -144,7 +144,12 @@ class DataBuilder:
                 dep_time = fmt_time(svc.events[0].atTime)
                 arr_time = fmt_time(svc.events[-1].atTime)
 
-            line_str = "Fast" if svc.line == Line.THROUGH else "Slow"
+            if svc.line == Line.THROUGH:
+                line_str = "Fast"
+            elif svc.line == Line.LOCAL:
+                line_str = "Slow"
+            else:
+                line_str = "Unknown"
 
             rows.append(
                 {

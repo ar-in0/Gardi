@@ -107,7 +107,7 @@ class GardiUI:
             [
                 dcc.Markdown(
                     """
-                        ## GARDI
+                        ## noGARDI
                         """.replace(
                         "  ", ""
                     ),

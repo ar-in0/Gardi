@@ -221,19 +221,18 @@ class Simulator:
         @self.app.callback(
             Output("backend-ready", "data"),
             [
-                Input("upload-wtt-inline", "contents"),
+                Input("app-state", "data"),
                 Input("upload-summary-inline", "contents"),
             ],
             prevent_initial_call=True,
         )
-        def init_backend(wttContents, summaryContents):
-            if wttContents is None or summaryContents is None:
+        def init_backend(app_state, summaryContents):
+            if not app_state or not app_state.get("initialized"):
+                raise PreventUpdate
+            if summaryContents is None:
                 return False
 
-            if not (
-                self.gardi.is_valid_xlsx(self.gardi.wttFileName)
-                and self.gardi.is_valid_xlsx(self.gardi.summaryFileName)
-            ):
+            if not self.gardi.is_valid_xlsx(self.gardi.summaryFileName):
                 raise PreventUpdate
 
             try:

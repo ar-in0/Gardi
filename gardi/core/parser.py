@@ -167,8 +167,11 @@ class TimeTableParser:
                 rc.serviceIds.append(sid)
                 service = next((s for s in allServices if str(sid) in str(s.serviceId)), None)
                 if service:
-                    service.linkName = linkName
-                    service.speed = speed # Assign the extracted speed label
+                    service.rakeLinkName = linkName
+                    if speed == "FAST":
+                        service.line = Line.THROUGH
+                    elif speed == "SLOW":
+                        service.line = Line.LOCAL
                 else:
                     rc.undefinedIds.append((linkName, sid))
 
@@ -181,6 +184,11 @@ class TimeTableParser:
                 print(f" ** Link {linkName}: Service {sid}")
         elif 'rc' in locals():
             print("\nAll rake link service IDs successfully matched with WTT services.")
+
+        # fallback: assign line type via heuristic for services not covered by LINK sheet
+        for svc in allServices:
+            if svc.line is None and svc.rawServiceCol is not None:
+                svc.line = self.determineLineTypeFallback(svc.rawServiceCol, None)
 
     def parseWttSummary(self, filePathXlsx):
         xlsx = pd.ExcelFile(filePathXlsx)
@@ -375,19 +383,21 @@ class TimeTableParser:
 
         return linkedService
 
-    def determineLineType(self, serviceCol, sheet):
+    def determineLineTypeFallback(self, serviceCol, sheet):
         '''Determine if service is Through (fast) or Local (slow) based on stations skipped'''
         timed_stations = 0
         total_stations = 0
 
-        for rowIdx, cell in serviceCol.items():
-            if TimeTableParser.rTimePattern.match(cell):
-                timed_stations += 1
-            total_stations += 1
+        return Line.UNKNOWN
 
-        if total_stations > 0 and (timed_stations / total_stations) < 0.4:
-            return Line.THROUGH
-        return Line.LOCAL
+        # for rowIdx, cell in serviceCol.items():
+        #     if TimeTableParser.rTimePattern.match(cell):
+        #         timed_stations += 1
+        #     total_stations += 1
+
+        # if total_stations > 0 and (timed_stations / total_stations) < 0.4:
+        #     return Line.THROUGH
+        # return Line.LOCAL
 
     @staticmethod
     def isServiceID(cell): # cell must be str
