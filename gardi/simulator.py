@@ -210,10 +210,19 @@ class Simulator:
             wttDecoded = base64.b64decode(wttContents.split(",")[1])
             wttIO = io.BytesIO(wttDecoded)
 
-            options = self.gardi.initialize_parser(wttIO)
+            try:
+                options = self.gardi.initialize_parser(wttIO)
+            except Exception as e:
+                print(f"Error parsing WTT file: {e}")
+                self.gardi.parser = None
+                return (
+                    {"initialized": False, "error": str(e)},
+                    [], [], [],
+                    [], [], [],
+                )
 
             return (
-                {"initialized": True},
+                {"initialized": True, "ts": datetime.now().isoformat()},
                 options, options, options,
                 options, options, options,
             )
@@ -242,6 +251,7 @@ class Simulator:
                 return True
             except Exception as e:
                 print(f"Error initializing backend: {e}")
+                self.gardi.parser = None
                 return False
 
     def _init_filter_query_callbacks(self):

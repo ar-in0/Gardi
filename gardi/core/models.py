@@ -62,6 +62,7 @@ class Day(Enum):
 class Line(Enum):
     THROUGH = 'through/fast'
     LOCAL = 'local/slow'
+    SEMI_FAST = 'semi-fast'
     UNKNOWN = 'unknown'
 
 class EventType(Enum):
@@ -356,6 +357,7 @@ class Service:
         self.serviceId = None
         self.direction = None
         self.line = None
+        self.lineSegments = []  # [(station_name, Line)] — line markers from SWTT
 
         self.rakeLinkName = None
         self.rakeSizeReq = None

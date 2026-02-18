@@ -37,15 +37,7 @@ class Gardi:
 
     def initialize_parser(self, wtt_file_obj):
         """Parse WTT, register stations, return station options."""
-        if not self.parser:
-            self.parser = TimeTableParser()
-        else:
-            # Clear parser state for re-upload
-            self.parser.wttSheets.clear()
-            self.parser.stations.clear()
-            self.parser.stationMap.clear()
-            self.parser.eventsByStationMap.clear()
-
+        self.parser = TimeTableParser()
         self.parser.xlsxToDfFromFileObj(wtt_file_obj)
         self.parser.registerStations()
 
@@ -55,10 +47,10 @@ class Gardi:
 
     def initialize_backend(self, summary_file_obj):
         """Parse summary, register services, isolate suburban."""
-        # Clear previous state to prevent duplicates on re-upload
         self.parser.wtt.upServices.clear()
         self.parser.wtt.downServices.clear()
         self.parser.wtt.rakecycles.clear()
+        self.parser.wtt.allCyclesWtt.clear()
         self.parser.eventsByStationMap.clear()
         self.linkTimingsCreated = False
 

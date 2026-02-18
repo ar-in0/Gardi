@@ -20,6 +20,8 @@ class TimeTableParser:
     rServiceIDPattern = re.compile(r'^\s*\d{5}(?:\b.*)?$', re.IGNORECASE)
     rLinkNamePattern = re.compile(r'^\s*([A-Z]{1,2})\s*(?:\u2020)?\s*$', re.UNICODE) # only match A AK with dagger, i.e. start links
     rEtyPattern = re.compile(r'\bETY\s*\d+\b', re.IGNORECASE)
+    rLineMarkerPattern = re.compile(r'^(?:(\d)/)?([TL])(?:H)?$', re.IGNORECASE)
+    # Matches: T, L, TH, 5/L, 6/T, 3/L etc. Group 1=platform, Group 2=T or L
 
     # Keep distanceMap as class attribute (immutable reference)
     distanceMap = DISTANCE_MAP
@@ -168,10 +170,11 @@ class TimeTableParser:
                 service = next((s for s in allServices if str(sid) in str(s.serviceId)), None)
                 if service:
                     service.rakeLinkName = linkName
-                    if speed == "FAST":
-                        service.line = Line.THROUGH
-                    elif speed == "SLOW":
-                        service.line = Line.LOCAL
+                    if service.line is None:  # SWTT markers take priority
+                        if speed == "FAST":
+                            service.line = Line.THROUGH
+                        elif speed == "SLOW":
+                            service.line = Line.LOCAL
                 else:
                     rc.undefinedIds.append((linkName, sid))
 
@@ -185,10 +188,6 @@ class TimeTableParser:
         elif 'rc' in locals():
             print("\nAll rake link service IDs successfully matched with WTT services.")
 
-        # fallback: assign line type via heuristic for services not covered by LINK sheet
-        for svc in allServices:
-            if svc.line is None and svc.rawServiceCol is not None:
-                svc.line = self.determineLineTypeFallback(svc.rawServiceCol, None)
 
     def parseWttSummary(self, filePathXlsx):
         xlsx = pd.ExcelFile(filePathXlsx)
@@ -383,22 +382,6 @@ class TimeTableParser:
 
         return linkedService
 
-    def determineLineTypeFallback(self, serviceCol, sheet):
-        '''Determine if service is Through (fast) or Local (slow) based on stations skipped'''
-        timed_stations = 0
-        total_stations = 0
-
-        return Line.UNKNOWN
-
-        # for rowIdx, cell in serviceCol.items():
-        #     if TimeTableParser.rTimePattern.match(cell):
-        #         timed_stations += 1
-        #     total_stations += 1
-
-        # if total_stations > 0 and (timed_stations / total_stations) < 0.4:
-        #     return Line.THROUGH
-        # return Line.LOCAL
-
     @staticmethod
     def isServiceID(cell): # cell must be str
         if not cell or cell.strip().lower() == "nan":
@@ -462,6 +445,44 @@ class TimeTableParser:
     def extractActiveDates(serviceCol):
         pass
 
+    def extractLineMarkers(self, serviceCol, sheet):
+        """Extract T/L line markers from a service column.
+        Returns list of (station_name, Line) tuples."""
+        markers = []
+        for rowIdx, cell in serviceCol.items():
+            cell_str = str(cell).strip()
+            if not cell_str or cell_str.lower() == 'nan':
+                continue
+
+            line_type = None
+            match = TimeTableParser.rLineMarkerPattern.match(cell_str)
+            if match:
+                code = match.group(2).upper()
+                line_type = Line.THROUGH if code == 'T' else Line.LOCAL
+            elif cell_str.upper() == 'O/L':
+                line_type = Line.LOCAL
+
+            if line_type is None:
+                continue
+
+            # Resolve station name (walk up rows if blank, same as extractInitStation)
+            stName = sheet.iat[rowIdx, 0]
+            if pd.isna(stName) or not str(stName).strip():
+                if rowIdx > 0:
+                    stName = sheet.iat[rowIdx - 1, 0]
+                if pd.isna(stName) or not str(stName).strip():
+                    if rowIdx > 1:
+                        stName = sheet.iat[rowIdx - 2, 0]
+            if pd.isna(stName) or not str(stName).strip():
+                continue
+
+            stName = normalize_station_name(str(stName).strip().upper())
+            if stName.upper() == 'STATIONS':
+                continue
+            markers.append((stName, line_type))
+
+        return markers
+
     def doRegisterServices(self, sheet, direction, numCols):
         serviceCols = sheet.columns
         for col in serviceCols[2:numCols]:
@@ -501,6 +522,15 @@ class TimeTableParser:
             service.finalStation = self.extractFinalStation(clean, sheet)
 
             service.linkedTo = self.extractLinkedToNext(clean, direction)
+
+            markers = self.extractLineMarkers(clean, sheet)
+            if markers:
+                service.lineSegments = markers
+                lines_used = set(m[1] for m in markers)
+                if len(lines_used) > 1:
+                    service.line = Line.SEMI_FAST
+                else:
+                    service.line = markers[0][1]
 
             if direction == Direction.UP:
                 self.wtt.upServices.append(service)
