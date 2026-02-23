@@ -257,6 +257,13 @@ class Simulator:
     def _init_filter_query_callbacks(self):
 
         @self.app.callback(
+            Input("line-type-selector", "value"),
+        )
+        def update_line_type(value):
+            self.gardi.query.lineType = value
+            return None
+
+        @self.app.callback(
             Input("start-station", "value"),
             Input("start-station_service", "value"),
         )
@@ -644,6 +651,7 @@ class Simulator:
             Output("right-panel-content", "children"),
             Output("mode-viz", "active"),
             Output("mode-details", "active"),
+            Output("rake-3d-graph", "style"),
             Input("mode-viz", "n_clicks"),
             Input("mode-details", "n_clicks"),
         )
@@ -654,11 +662,17 @@ class Simulator:
                 return (
                     {"display": "none"},
                     self.gardi.build_query_info_panel(),
-                    False,
-                    True,
+                    False, True,
+                    {"display": "none"},
                 )
 
-            return {"display": "block"}, html.Div(), True, False
+            # default: mode-viz (3D)
+            return (
+                {"display": "block"},
+                html.Div(),
+                True, False,
+                {"height": "65vh", "display": "block"},
+            )
 
         @self.app.callback(
             Output("status-div", "children"),

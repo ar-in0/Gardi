@@ -274,6 +274,26 @@ class GardiUI:
             },
         )
 
+    def drawLineTypeDropdown(self):
+        return html.Div(
+            dcc.Dropdown(
+                id="line-type-selector",
+                options=[
+                    {"label": "All Lines", "value": "all"},
+                    {"label": "Through (Fast)", "value": "through"},
+                    {"label": "Local (Slow)", "value": "local"},
+                    {"label": "Semi-Fast", "value": "semi-fast"},
+                ],
+                value="all",
+                clearable=False,
+                style={"fontSize": "13px"},
+            ),
+            style={
+                "padding": "0px 35px",
+                "marginBottom": "8px",
+            },
+        )
+
     def drawRakeLinkFilters(self):
         return dbc.Tab(
             label="Rake Links",
@@ -525,6 +545,7 @@ class GardiUI:
                     style={"padding": "0px 0px"},
                 ),
                 self.drawACRadioButtons(),
+                self.drawLineTypeDropdown(),
                 html.Div(id="filter-overlay", style={"display": "none"}),
                 self.drawTabbedFilters(),
             ],

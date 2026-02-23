@@ -551,7 +551,7 @@ class StationEvent:
         self.atTime = self._timeToMinutes(time)
 
         self.platform = None
-        self.eType = None
+        self.eType = type
         self.render = True
 
     def _timeToMinutes(self, time_str):

@@ -4,6 +4,8 @@ from enum import Enum
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
+from gardi.core.models import Line
+
 
 class FilterType(Enum):
     RAKELINK = "rakelink"
@@ -21,6 +23,7 @@ class FilterQuery:
     inTimePeriod: Optional[Tuple[int, int]] = (165, 1605)
 
     ac: Optional[bool] = None
+    lineType: Optional[str] = "all"
     inDirection: Optional[List[str]] = None
     selectedLinks: List[str] = field(default_factory=list)
     selectedServices: List[str] = field(default_factory=list)
@@ -52,6 +55,7 @@ class FilterEngine:
         self._apply_terminal_station_filters(wtt, qq.startStation, qq.endStation)
         self._apply_passing_through_filter(wtt, qq)
         self._apply_ac_filter(wtt, qq)
+        self._apply_line_type_filter(wtt, qq)
 
         visible_count = len([r for r in wtt.rakecycles if r.render])
         print(f"Visible rake cycles after filter: {visible_count}")
@@ -161,6 +165,8 @@ class FilterEngine:
             svc.checkPassingThroughConstraint(qq)
             # print(f"constraint checks done for {svc}")
 
+        self._apply_line_type_filter(wtt, qq)
+
         for rc in wtt.rakecycles:
             rc.render = False
             if rc.servicePath:
@@ -198,3 +204,29 @@ class FilterEngine:
                     ev.render = False
 
             svc.checkACConstraint(qq)
+
+        self._apply_line_type_filter(wtt, qq)
+
+    def _apply_line_type_filter(self, wtt, qq):
+        """Filter services by line type (through/local/semi-fast)."""
+        lt = qq.lineType
+        if not lt or lt == "all":
+            return
+
+        LINE_MAP = {
+            "through": Line.THROUGH,
+            "local": Line.LOCAL,
+            "semi-fast": Line.SEMI_FAST,
+        }
+        target = LINE_MAP.get(lt)
+        if not target:
+            return
+
+        for svc in wtt.suburbanServices:
+            if svc.render and svc.line != target:
+                svc.render = False
+
+        for rc in wtt.rakecycles:
+            if rc.render and rc.servicePath:
+                if not any(svc.render for svc in rc.servicePath):
+                    rc.render = False
