@@ -6,14 +6,66 @@ import io
 import base64
 import plotly.graph_objs as go
 
-from dash import dcc, html, Input, Output, State, callback_context
+from dash import dcc, html, dash_table, Input, Output, State, callback_context
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 from datetime import datetime
 
 from gardi.gardi import Gardi
 from gardi.core.filters import FilterType
+from gardi.core.models import DISTANCE_MAP
 from gardi.ui import GardiUI
+
+
+def _render_distribution_grid(dist_data, stations=None):
+    """Render distribution cards for given stations (or all if None)."""
+    if stations is None:
+        sorted_stations = sorted(
+            dist_data.keys(),
+            key=lambda s: DISTANCE_MAP.get(s, 0),
+        )
+    else:
+        sorted_stations = [s for s in stations if s in dist_data]
+
+    cols = []
+    for station in sorted_stations:
+        info = dist_data[station]
+        bucket_spans = []
+        for br in info["buckets"]:
+            if br["count"] == 0:
+                continue
+            bucket_spans.append(
+                html.Div(
+                    f'{br["bucket"]} {br["bar"]} {br["count"]}',
+                    style={
+                        "fontFamily": "monospace",
+                        "fontSize": "11px",
+                        "whiteSpace": "pre",
+                    },
+                )
+            )
+        cols.append(
+            dbc.Col(
+                html.Div([
+                    html.Div(
+                        f"{station} ({info['events']} events)",
+                        style={
+                            "fontWeight": "600",
+                            "fontSize": "13px",
+                            "marginBottom": "2px",
+                        },
+                    ),
+                    html.Div(bucket_spans),
+                ], style={"marginBottom": "8px"}),
+                width=3,
+            )
+        )
+
+    grid_rows = []
+    for i in range(0, len(cols), 4):
+        grid_rows.append(dbc.Row(cols[i:i+4], className="g-2"))
+
+    return html.Div(grid_rows, style={"padding": "8px 0"}) if grid_rows else html.Div()
 
 
 class Simulator:
@@ -423,17 +475,22 @@ class Simulator:
         @self.app.callback(
             Output("rake-link-table-container", "style"),
             Output("service-table-container", "style"),
+            Output("station-gap-table-container", "style"),
             Input("filter-tabs", "active_tab"),
             Input("graph-ready", "data"),
         )
         def toggle_table_display(active_tab, graph_ready):
+            hidden = {"display": "none"}
+            shown = {"padding": "10px 0px", "display": "block"}
             if not graph_ready:
-                return {"display": "none"}, {"display": "none"}
+                return hidden, hidden, hidden
 
             if active_tab == "tab-service":
-                return {"display": "none"}, {"padding": "10px 0px", "display": "block"}
+                return hidden, shown, hidden
+            elif active_tab == "tab-station":
+                return hidden, hidden, shown
             else:
-                return {"padding": "10px 0px", "display": "block"}, {"display": "none"}
+                return shown, hidden, hidden
 
         @self.app.callback(
             Output("rake-3d-graph", "figure", allow_duplicate=True),
@@ -576,6 +633,143 @@ class Simulator:
             return rows, rows, f"{len(rows)} rake links"
 
         @self.app.callback(
+            Output("station-gap-table", "data"),
+            Output("station-gap-count", "children"),
+            Output("station-gap-table", "selected_rows", allow_duplicate=True),
+            Output("station-gap-distributions", "children"),
+            Input("graph-ready", "data"),
+            Input("ac-selector", "value"),
+            State("filter-tabs", "active_tab"),
+            prevent_initial_call=True,
+        )
+        def build_station_gap_table(graph_ready, ac_select, active_tab):
+            is_station_mode = (
+                active_tab == "tab-station"
+                or self.gardi.query.type == FilterType.STATION
+            )
+            if not graph_ready or self.gardi.parser is None or not is_station_mode:
+                return [], "", [], html.Div()
+
+            rows = self.gardi.build_station_gap_summary()
+
+            dist_data = self.gardi.build_all_station_distributions()
+            dist_grid = _render_distribution_grid(dist_data)
+
+            return rows, f"{len(rows)} stations", [], dist_grid
+
+        @self.app.callback(
+            Output("station-gap-detail-header", "children", allow_duplicate=True),
+            Output("rake-3d-graph", "figure", allow_duplicate=True),
+            Output("station-gap-detail-table", "data", allow_duplicate=True),
+            Output("station-gap-detail-table", "selected_rows", allow_duplicate=True),
+            Output("station-gap-detail-container", "style", allow_duplicate=True),
+            Output("station-gap-distributions", "children", allow_duplicate=True),
+            Input("station-gap-table", "selected_rows"),
+            State("station-gap-table", "data"),
+            State("rake-3d-graph", "figure"),
+            prevent_initial_call=True,
+        )
+        def show_station_gap_detail(selected_rows, table_data, current_fig):
+            if current_fig is None:
+                raise PreventUpdate
+
+            fig = go.Figure(current_fig)
+
+            if not selected_rows or not table_data:
+                # Check if any highlighting is active (enlarged markers)
+                has_highlights = any(
+                    hasattr(t.marker, 'size') and isinstance(t.marker.size, (list, tuple)) and any(s > 2 for s in t.marker.size)
+                    for t in fig.data if t.name != "__focus"
+                )
+                if has_highlights:
+                    self.gardi.reset_station_highlight(fig)
+                    # Restore full distribution grid
+                    dist_data = self.gardi.build_all_station_distributions()
+                    dist_grid = _render_distribution_grid(dist_data)
+                    return html.Div(), fig, [], [], {"display": "none"}, dist_grid
+                # Restore full distribution grid
+                dist_data = self.gardi.build_all_station_distributions()
+                dist_grid = _render_distribution_grid(dist_data)
+                return html.Div(), dash.no_update, [], [], {"display": "none"}, dist_grid
+
+            # All selected stations for graph highlighting
+            selected_stations = [
+                table_data[idx]["station"]
+                for idx in selected_rows
+                if idx < len(table_data)
+            ]
+            self.gardi.highlight_stations(fig, selected_stations)
+
+            # Detail view for ALL selected stations
+            detail_rows = self.gardi.build_station_gap_detail(selected_stations)
+
+            # Count events per station
+            station_event_counts = {}
+            for r in detail_rows:
+                st = r.get("station", "?")
+                station_event_counts[st] = station_event_counts.get(st, 0) + 1
+
+            # Simple header label for selected station(s)
+            labels = [
+                f"{st} ({station_event_counts.get(st, 0)} events)"
+                for st in selected_stations
+            ]
+            header = html.Div(
+                " · ".join(labels),
+                style={
+                    "fontWeight": "600",
+                    "fontSize": "13px",
+                    "padding": "8px 0",
+                },
+            )
+
+            # Filter distribution grid to selected stations
+            dist_data = self.gardi.build_all_station_distributions()
+            dist_grid = _render_distribution_grid(dist_data, stations=selected_stations)
+
+            return header, fig, detail_rows, dash.no_update, {"display": "block"}, dist_grid
+
+        @self.app.callback(
+            Output("rake-3d-graph", "figure", allow_duplicate=True),
+            Input("station-gap-detail-table", "selected_rows"),
+            State("station-gap-detail-table", "data"),
+            State("station-gap-table", "selected_rows"),
+            State("station-gap-table", "data"),
+            State("rake-3d-graph", "figure"),
+            prevent_initial_call=True,
+        )
+        def focus_event_from_detail(selected_rows, detail_data, gap_selected, gap_data, current_fig):
+            if current_fig is None:
+                raise PreventUpdate
+
+            fig = go.Figure(current_fig)
+
+            if not selected_rows or not detail_data:
+                # Deselected — re-apply station-level highlighting
+                if gap_selected and gap_data:
+                    selected_stations = [
+                        gap_data[idx]["station"]
+                        for idx in gap_selected
+                        if idx < len(gap_data)
+                    ]
+                    self.gardi.reset_station_highlight(fig)
+                    self.gardi.highlight_stations(fig, selected_stations)
+                return fig
+
+            targets = []
+            for idx in selected_rows:
+                if idx < len(detail_data):
+                    row = detail_data[idx]
+                    time_raw = row.get("time_raw")
+                    station = row.get("station")
+                    if time_raw is not None and station:
+                        targets.append((time_raw, station))
+            if targets:
+                self.gardi.focus_event(fig, targets)
+
+            return fig
+
+        @self.app.callback(
             Output("right-panel-content", "children", allow_duplicate=True),
             Input("rake-link-table", "selected_rows"),
             State("mode-details", "active"),
@@ -681,6 +875,7 @@ class Simulator:
             Output("graph-ready", "data"),
             Output("rake-link-table", "selected_rows", allow_duplicate=True),
             Output("service-table", "selected_rows", allow_duplicate=True),
+            Output("station-gap-table", "selected_rows", allow_duplicate=True),
             Input("generate-button", "n_clicks"),
             Input("rake-3d-graph", "clickData"),
             Input("ac-selector", "value"),
@@ -692,7 +887,7 @@ class Simulator:
             n_clicks, clickData, ac_status, wttContents, summaryContents
         ):
             if n_clicks == 0 or wttContents is None or summaryContents is None:
-                return "", go.Figure(), True, False, [], []
+                return "", go.Figure(), True, False, [], [], []
 
             try:
                 self.gardi.query.ac = ac_status
@@ -701,12 +896,24 @@ class Simulator:
 
                 fig = self.gardi.generate_visualization()
 
-                return html.Div(), fig, False, True, [], []
+                return html.Div(), fig, False, True, [], [], []
 
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                return (html.Div(f"Error: {e}"), go.Figure(), True, False, [], [])
+                return (html.Div(f"Error: {e}"), go.Figure(), True, False, [], [], [])
+
+        @self.app.callback(
+            Output("distributions-collapse", "is_open"),
+            Output("toggle-distributions-btn", "children"),
+            Input("toggle-distributions-btn", "n_clicks"),
+            State("distributions-collapse", "is_open"),
+            prevent_initial_call=True,
+        )
+        def toggle_distributions(n_clicks, is_open):
+            new_state = not is_open
+            label = "\u25be Distributions" if new_state else "\u25b8 Distributions"
+            return new_state, label
 
         @self.app.callback(
             Output("download-report", "data"),

@@ -6,7 +6,7 @@ from dash import html, dash_table
 import dash_bootstrap_components as dbc
 
 from gardi.core.filters import FilterType
-from gardi.core.models import Line
+from gardi.core.models import Line, EventType, DISTANCE_MAP, Direction
 
 
 def fmt_time(t):
@@ -78,7 +78,7 @@ class DataBuilder:
 
             svc_id_str = ",".join(str(sid) for sid in svc.serviceId)
             start_time = fmt_time(svc.events[0].atTime) if svc.events else "--:--"
-
+            end_time = fmt_time(svc.events[-1].atTime) if svc.events else "--:--"
             # Find which rake link this service belongs to
             rake_link = "?"
             for rc in wtt.rakecycles:
@@ -100,6 +100,7 @@ class DataBuilder:
                         svc.finalStation.name if svc.finalStation else "?"
                     ),
                     "start_time": start_time,
+                    "traversal_time": int(svc.events[-1].atTime) -int(svc.events[0].atTime),
                     "rake_link": rake_link,
                 }
             )
@@ -345,3 +346,300 @@ class DataBuilder:
                 "backgroundColor": "#f9fafb",
             },
         )
+
+    def build_station_gap_summary(self, parser, query):
+        """Build per-station gap summary table for station filter mode.
+
+        Returns list of dicts with gap statistics per station, sorted by distance.
+        """
+        rows = []
+
+        for station_name, events in parser.eventsByStationMap.items():
+            # Collect rendered events, collapse arr+dep pairs per service to single event
+            svc_times = {}  # service_id -> (time, direction, is_ac, line)
+            for ev in events:
+                if not ev.render:
+                    continue
+                if ev.atTime is None:
+                    continue
+                svc = ev.ofService
+                if not svc.render:
+                    continue
+                sid = svc.serviceId[0]
+                # Keep departure time if available (overrides arrival)
+                if sid not in svc_times or ev.eType == EventType.DEPARTURE:
+                    svc_times[sid] = (ev.atTime, svc.direction, svc.needsACRake, svc.line)
+
+            if not svc_times:
+                continue
+
+            times_with_meta = sorted(svc_times.values(), key=lambda x: x[0])
+            times = [t[0] for t in times_with_meta]
+            up_count = sum(1 for t in times_with_meta if t[1] == Direction.UP)
+            down_count = sum(1 for t in times_with_meta if t[1] == Direction.DOWN)
+
+            if len(times) < 2:
+                rows.append({
+                    "station": station_name,
+                    "dist_km": DISTANCE_MAP.get(station_name, 0),
+                    "events": len(times),
+                    "up": up_count,
+                    "down": down_count,
+                    "min_gap": "--",
+                    "max_gap": "--",
+                })
+                continue
+
+            gaps = [times[i + 1] - times[i] for i in range(len(times) - 1)]
+            min_gap = min(gaps)
+            max_gap = max(gaps)
+
+            rows.append({
+                "station": station_name,
+                "dist_km": DISTANCE_MAP.get(station_name, 0),
+                "events": len(times),
+                "up": up_count,
+                "down": down_count,
+                "min_gap": round(min_gap, 1),
+                "max_gap": round(max_gap, 1),
+            })
+
+        rows.sort(key=lambda r: r["dist_km"])
+        return rows
+
+    def _classify_stop(self, svc, station_name):
+        """Classify a service's stop at a station as Origin/Terminal/Pass/Halt."""
+        if not svc.events:
+            return "Pass"
+
+        # Check origin/terminal by position in event list
+        first_station = svc.events[0].atStation.upper() if svc.events[0].atStation else ""
+        last_station = svc.events[-1].atStation.upper() if svc.events[-1].atStation else ""
+        st_upper = station_name.upper()
+
+        if st_upper == first_station:
+            return "Origin"
+        if st_upper == last_station:
+            return "Terminal"
+
+        # Collect this service's events at this station
+        station_events = [
+            ev for ev in svc.events
+            if ev.atStation and ev.atStation.upper() == st_upper
+            and ev.render and ev.atTime is not None
+        ]
+
+        if len(station_events) <= 1:
+            return "Pass"
+
+        # 2 events: check if arr/dep times differ
+        times = sorted(ev.atTime for ev in station_events)
+        if times[0] == times[-1]:
+            return "Pass"
+
+        halt_min = int(round(times[-1] - times[0]))
+        return f"Halt ({halt_min}m)"
+
+    def build_station_gap_detail(self, parser, station_names):
+        """Build per-event detail table for one or more stations.
+
+        Collects events from all stations, computes gaps within each station
+        independently, sorts chronologically. Adds time_raw and station columns.
+        Returns list of dicts with time, time_raw, station, service, direction,
+        event_type, gap info, gap_bar.
+        """
+        if isinstance(station_names, str):
+            station_names = [station_names]
+
+        all_rows = []
+        all_gap_values = []
+
+        for station_name in station_names:
+            events = parser.eventsByStationMap.get(station_name, [])
+
+            # Collapse arr+dep per service, keep departure time for gap computation
+            svc_map = {}  # sid -> (ev, svc)
+            for ev in events:
+                if not ev.render or ev.atTime is None:
+                    continue
+                svc = ev.ofService
+                if not svc.render:
+                    continue
+                sid = svc.serviceId[0]
+                if sid not in svc_map or ev.eType == EventType.DEPARTURE:
+                    svc_map[sid] = (ev, svc)
+
+            sorted_entries = sorted(svc_map.values(), key=lambda x: x[0].atTime)
+
+            # Compute gaps within this station
+            for i, (ev, svc) in enumerate(sorted_entries):
+                gap_before = round(ev.atTime - sorted_entries[i - 1][0].atTime, 1) if i > 0 else "--"
+                gap_after = round(sorted_entries[i + 1][0].atTime - ev.atTime, 1) if i < len(sorted_entries) - 1 else "--"
+
+                if isinstance(gap_before, (int, float)):
+                    all_gap_values.append(gap_before)
+                if isinstance(gap_after, (int, float)):
+                    all_gap_values.append(gap_after)
+
+                event_type = self._classify_stop(svc, station_name)
+
+                all_rows.append({
+                    "time": fmt_time(ev.atTime),
+                    "time_raw": round(ev.atTime, 2),
+                    "station": station_name,
+                    "service": ",".join(str(s) for s in svc.serviceId),
+                    "direction": svc.direction.name if svc.direction else "?",
+                    "is_ac": "AC" if svc.needsACRake else "Non-AC",
+                    "line": "Fast" if svc.line == Line.THROUGH else "Slow" if svc.line == Line.LOCAL else "Semi-Fast" if svc.line == Line.SEMI_FAST else "?",
+                    "event_type": event_type,
+                    "gap_before": gap_before,
+                    "gap_after": gap_after,
+                })
+
+        # Sort all rows chronologically
+        all_rows.sort(key=lambda r: r["time_raw"])
+
+        # Build bidirectional gap bar: ■·│ chars, 7 per side + center │
+        max_gap = max(all_gap_values) if all_gap_values else 1
+        half_w = 7
+        for row in all_rows:
+            gb = row["gap_before"]
+            ga = row["gap_after"]
+            gb_n = gb if isinstance(gb, (int, float)) else 0
+            ga_n = ga if isinstance(ga, (int, float)) else 0
+
+            # max_gap_val for conditional styling
+            row["max_gap_val"] = max(
+                gb_n if isinstance(gb, (int, float)) else 0,
+                ga_n if isinstance(ga, (int, float)) else 0,
+            )
+
+            if max_gap > 0:
+                left_fill = round((gb_n / max_gap) * half_w)
+                right_fill = round((ga_n / max_gap) * half_w)
+            else:
+                left_fill = 0
+                right_fill = 0
+
+            # Left side: empty then filled, reading left-to-right toward center
+            left = "\u00b7" * (half_w - left_fill) + "\u25a0" * left_fill
+            # Right side: filled then empty, reading left-to-right from center
+            right = "\u25a0" * right_fill + "\u00b7" * (half_w - right_fill)
+            row["gap_bar"] = left + "\u2502" + right
+
+        return all_rows
+
+    def build_all_station_distributions(self, parser):
+        """Compute gap distributions for all stations directly from parser.
+
+        Returns dict: {station_name: {"events": int, "buckets": [bucket_rows]}}
+        where each bucket row has 'bucket', 'count', 'bar'.
+        Efficient: doesn't build full detail row dicts.
+        """
+        buckets_def = [
+            ("0-2m", 0, 2),
+            ("2-5m", 2, 5),
+            ("5-10m", 5, 10),
+            ("10-15m", 10, 15),
+            ("15-20m", 15, 20),
+            ("20-30m", 20, 30),
+            ("30-60m", 30, 60),
+            ("60m+", 60, float("inf")),
+        ]
+
+        result = {}
+        for station_name, events in parser.eventsByStationMap.items():
+            # Collapse arr+dep per service, keep departure time
+            svc_times = {}
+            for ev in events:
+                if not ev.render or ev.atTime is None:
+                    continue
+                svc = ev.ofService
+                if not svc.render:
+                    continue
+                sid = svc.serviceId[0]
+                if sid not in svc_times or ev.eType == EventType.DEPARTURE:
+                    svc_times[sid] = ev.atTime
+
+            if len(svc_times) < 2:
+                continue
+
+            times = sorted(svc_times.values())
+            gaps = [times[i + 1] - times[i] for i in range(len(times) - 1)]
+
+            # Bucket the gaps
+            counts = {b[0]: 0 for b in buckets_def}
+            for g in gaps:
+                for name, lo, hi in buckets_def:
+                    if lo <= g < hi:
+                        counts[name] += 1
+                        break
+
+            max_count = max(counts.values()) if counts else 1
+            bar_width = 10
+            bucket_rows = []
+            for name, _, _ in buckets_def:
+                c = counts[name]
+                if max_count > 0:
+                    filled = round((c / max_count) * bar_width)
+                else:
+                    filled = 0
+                bar = "\u2588" * filled + "\u2591" * (bar_width - filled)
+                bucket_rows.append({"bucket": name, "count": c, "bar": bar})
+
+            result[station_name] = {
+                "events": len(svc_times),
+                "buckets": bucket_rows,
+            }
+
+        return result
+
+    def build_gap_distribution(self, detail_rows):
+        """Build per-station gap distribution from detail rows.
+
+        Returns dict: {station_name: [bucket_rows]} where each bucket row
+        has 'bucket', 'count', and 'bar' (using █░ chars).
+        """
+        buckets = [
+            ("0-2m", 0, 2),
+            ("2-5m", 2, 5),
+            ("5-10m", 5, 10),
+            ("10-15m", 10, 15),
+            ("15-20m", 15, 20),
+            ("20-30m", 20, 30),
+            ("30-60m", 30, 60),
+            ("60m+", 60, float("inf")),
+        ]
+
+        # Group gap_before values by station
+        station_gaps = {}
+        for row in detail_rows:
+            st = row.get("station", "?")
+            gb = row.get("gap_before")
+            if not isinstance(gb, (int, float)):
+                continue
+            station_gaps.setdefault(st, []).append(gb)
+
+        result = {}
+        for station, gaps in station_gaps.items():
+            counts = {b[0]: 0 for b in buckets}
+            for g in gaps:
+                for name, lo, hi in buckets:
+                    if lo <= g < hi:
+                        counts[name] += 1
+                        break
+
+            max_count = max(counts.values()) if counts else 1
+            bar_width = 10
+            rows = []
+            for name, _, _ in buckets:
+                c = counts[name]
+                if max_count > 0:
+                    filled = round((c / max_count) * bar_width)
+                else:
+                    filled = 0
+                bar = "\u2588" * filled + "\u2591" * (bar_width - filled)
+                rows.append({"bucket": name, "count": c, "bar": bar})
+            result[station] = rows
+
+        return result

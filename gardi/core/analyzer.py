@@ -5,7 +5,7 @@ from collections import defaultdict
 
 import pandas as pd
 
-from gardi.core.models import DISTANCE_MAP, Direction
+from gardi.core.models import DISTANCE_MAP
 
 
 # Ordered station list derived from DISTANCE_MAP
@@ -38,36 +38,14 @@ class TraversalAnalyzer:
             if not svc.events or len(svc.events) < 2:
                 continue
             total_services += 1
+            direction = svc.direction.name if svc.direction else "UNKNOWN"
 
-            # Build per-station timing: departure time (or only time)
-            visited = []
-            for evt in svc.events:
-                if evt.atTime is None:
+            for leg in svc.legs:
+                if (leg.from_station, leg.to_station) not in _ADJACENT_SET:
                     continue
-                station = evt.atStation
-                # Collapse multiple events at same station (arr+dep) — keep last (departure)
-                if visited and visited[-1][0] == station:
-                    visited[-1] = (station, evt.atTime)
-                else:
-                    visited.append((station, evt.atTime))
-
-            # Walk consecutive pairs
-            for i in range(len(visited) - 1):
-                st_a, t_a = visited[i]
-                st_b, t_b = visited[i + 1]
-
-                if (st_a, st_b) not in _ADJACENT_SET:
-                    continue
-
-                run_time = t_b - t_a
-                if run_time < 0:
-                    run_time += 1440  # midnight wrap
-
-                if run_time <= 0 or run_time > 30:
+                if leg.run_minutes <= 0 or leg.run_minutes > 30:
                     continue  # skip implausible values
-
-                direction = svc.direction.name if svc.direction else "UNKNOWN"
-                samples[(st_a, st_b, direction)].append(run_time)
+                samples[(leg.from_station, leg.to_station, direction)].append(leg.run_minutes)
 
         # Build rows
         rows = []

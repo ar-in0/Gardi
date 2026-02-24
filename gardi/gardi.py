@@ -98,6 +98,24 @@ class Gardi:
     def build_rake_table(self):
         return self.data_builder.build_rake_table_data(self.parser.wtt)
 
+    def build_station_gap_summary(self):
+        return self.data_builder.build_station_gap_summary(self.parser, self.query)
+
+    def build_station_gap_detail(self, station_names):
+        return self.data_builder.build_station_gap_detail(self.parser, station_names)
+
+    def build_gap_distribution(self, detail_rows):
+        return self.data_builder.build_gap_distribution(detail_rows)
+
+    def build_all_station_distributions(self):
+        return self.data_builder.build_all_station_distributions(self.parser)
+
+    def reset_station_highlight(self, fig):
+        self.graph_builder.reset_station_highlight(fig)
+
+    def focus_event(self, fig, targets):
+        self.graph_builder.focus_event(fig, targets)
+
     def export_xlsx(self):
         return self.data_builder.export_to_xlsx(self.parser.wtt)
 
@@ -109,6 +127,9 @@ class Gardi:
 
     def highlight_links(self, fig, selected_links):
         self.graph_builder.highlight_links(fig, selected_links)
+
+    def highlight_stations(self, fig, station_names):
+        self.graph_builder.highlight_stations(fig, station_names)
 
     def highlight_services(self, fig, selected_services):
         self.graph_builder.highlight_services(fig, selected_services)

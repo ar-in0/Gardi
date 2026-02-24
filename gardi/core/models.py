@@ -9,6 +9,7 @@
 import pandas as pd
 import re
 from collections import defaultdict
+from dataclasses import dataclass
 import logging
 from datetime import datetime
 import time
@@ -368,6 +369,7 @@ class Service:
         self.finalStation = None
 
         self.events = []
+        self.legs = []
 
         self.activeDates = set(Day)
         self.render = True
@@ -526,6 +528,58 @@ class Service:
                     self.events.append(e)
                     parser.eventsByStationMap[stName].append(e)
 
+        self.build_legs()
+
+    def build_legs(self):
+        """Build ServiceLeg list from events and lineSegments."""
+        # Collapse events into (station, depart_time) tuples
+        # For stations with arr+dep, keep departure time; for terminal, keep arrival
+        visited = []
+        for evt in self.events:
+            if evt.atTime is None:
+                continue
+            if visited and visited[-1][0] == evt.atStation:
+                # Update to latest time at this station (departure overrides arrival)
+                visited[-1] = (evt.atStation, evt.atTime)
+            else:
+                visited.append((evt.atStation, evt.atTime))
+
+        if len(visited) < 2:
+            sid = ','.join(str(s) for s in self.serviceId) if self.serviceId else '?'
+            logger.debug(f"Service {sid}: {len(self.events)} events but only {len(visited)} distinct station(s) with valid times — no legs built")
+            return
+
+        # Build line type lookup from lineSegments: station -> Line
+        # Each marker means "from this station onward, use this line type"
+        line_at = {}
+        for station, line_type in self.lineSegments:
+            line_at[station] = line_type
+
+        # Propagate line type: walk visited stations, carry forward last known line
+        current_line = self.line or Line.UNKNOWN
+        line_per_station = {}
+        for station, _ in visited:
+            if station in line_at:
+                current_line = line_at[station]
+            line_per_station[station] = current_line
+
+        self.legs = []
+        for i in range(len(visited) - 1):
+            st_a, t_a = visited[i]
+            st_b, t_b = visited[i + 1]
+            run = t_b - t_a
+            if run < 0:
+                run += 1440  # midnight wrap
+            leg_line = line_per_station.get(st_a, self.line or Line.UNKNOWN)
+            self.legs.append(ServiceLeg(
+                from_station=st_a,
+                to_station=st_b,
+                depart_time=t_a,
+                arrive_time=t_b,
+                line=leg_line,
+                run_minutes=run,
+            ))
+
     def __repr__(self):
         sid = ','.join(str(s) for s in self.serviceId) if self.serviceId else 'None'
         dirn = self.direction.name if self.direction else 'NA'
@@ -570,6 +624,17 @@ class StationEvent:
         if minutes < 165:  # 2:45 AM wrap-around
             minutes += 1440
         return minutes
+
+
+@dataclass
+class ServiceLeg:
+    """One station-to-station hop within a service."""
+    from_station: str
+    to_station: str
+    depart_time: int        # minutes since midnight (with 2:45AM wrap)
+    arrive_time: int        # minutes since midnight
+    line: Line              # line type for this leg
+    run_minutes: float      # arrive_time - depart_time
 
 
 class Station:

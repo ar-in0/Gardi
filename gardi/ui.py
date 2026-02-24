@@ -745,10 +745,123 @@ class GardiUI:
             },
         )
 
+    def drawStationGapTable(self):
+        return html.Div(
+            id="station-gap-table-container",
+            children=[
+                html.Hr(),
+                html.Div(
+                    id="station-gap-count",
+                    style={
+                        "marginBottom": "6px",
+                        "fontWeight": "500",
+                    },
+                ),
+                # Collapsible distribution grid
+                dbc.Button(
+                    "\u25b8 Distributions",
+                    id="toggle-distributions-btn",
+                    size="sm",
+                    color="link",
+                    style={"padding": "2px 0", "fontSize": "12px", "textDecoration": "none"},
+                ),
+                dbc.Collapse(
+                    html.Div(id="station-gap-distributions"),
+                    id="distributions-collapse",
+                    is_open=False,
+                ),
+                dash_table.DataTable(
+                    id="station-gap-table",
+                    columns=[
+                        {"name": "Station", "id": "station"},
+                        {"name": "Dist (km)", "id": "dist_km"},
+                        {"name": "Events", "id": "events"},
+                        {"name": "UP", "id": "up"},
+                        {"name": "DOWN", "id": "down"},
+                        {"name": "Min Gap", "id": "min_gap"},
+                        {"name": "Max Gap", "id": "max_gap"},
+                    ],
+                    data=[],
+                    row_selectable="multi",
+                    selected_rows=[],
+                    page_size=30,
+                    sort_action="native",
+                    filter_action="native",
+                    style_table={
+                        "maxHeight": "200px",
+                        "overflowY": "auto",
+                    },
+                    style_cell={
+                        "padding": "6px",
+                        "fontSize": "13px",
+                    },
+                    style_data_conditional=[
+                        {
+                            "if": {
+                                "filter_query": "{max_gap} > 60",
+                                "column_id": "max_gap",
+                            },
+                            "backgroundColor": "#fee2e2",
+                            "color": "#991b1b",
+                        },
+                    ],
+                ),
+                html.Div(
+                    id="station-gap-detail-container",
+                    children=[
+                        html.Div(id="station-gap-detail-header"),
+                        dash_table.DataTable(
+                            id="station-gap-detail-table",
+                            columns=[
+                                {"name": "Time", "id": "time"},
+                                {"name": "Station", "id": "station"},
+                                {"name": "Service", "id": "service"},
+                                {"name": "Dir", "id": "direction"},
+                                {"name": "AC?", "id": "is_ac"},
+                                {"name": "Line", "id": "line"},
+                                {"name": "\u25c0 Gap \u2502 Gap \u25b6", "id": "gap_bar"},
+                            ],
+                            data=[],
+                            row_selectable="multi",
+                            selected_rows=[],
+                            sort_action="native",
+                            filter_action="native",
+                            style_table={"maxHeight": "30vh", "overflowY": "auto"},
+                            style_cell={"padding": "5px", "fontSize": "12px"},
+                            style_cell_conditional=[
+                                {
+                                    "if": {"column_id": "gap_bar"},
+                                    "fontFamily": "monospace",
+                                    "fontSize": "11px",
+                                    "whiteSpace": "pre",
+                                },
+                            ],
+                            style_data_conditional=[
+                                {
+                                    "if": {
+                                        "filter_query": "{max_gap_val} > 30",
+                                        "column_id": "gap_bar",
+                                    },
+                                    "backgroundColor": "#fee2e2",
+                                    "color": "#991b1b",
+                                },
+                            ],
+                        ),
+                    ],
+                    style={"display": "none"},
+                ),
+            ],
+            style={
+                "padding": "10px 0px",
+                "display": "none",
+            },
+        )
+
     def drawDynamicContent(self):
         # We combine the graph/link table list with the service table component
         content_children = self.drawGraphPlaneLinkTable()
         content_children.append(self.drawServiceTable())
+        content_children.append(self.drawStationGapTable())
 
         return html.Div(
             id="viz-container",

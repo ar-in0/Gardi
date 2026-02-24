@@ -6,3 +6,6 @@ __pycache__/
 *old
 NOTES.md
 CLAUDE.md
+*.png
+*.PNG
+*.pdf
