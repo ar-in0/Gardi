@@ -264,20 +264,69 @@ class GraphBuilder:
         return fig
 
     def highlight_services(self, fig, selected_services):
-        if not selected_services:
-            return
-
         selected_set = set(selected_services)
 
+        # Remove any prior overlay traces
+        fig.data = [t for t in fig.data if t.name != "__selected"]
+
         for trace in fig.data:
+            if trace.name == "__focus":
+                continue
             cd = trace.customdata
             if cd is not None and len(cd) > 0:
-                sizes = [4 if c in selected_set else 1 for c in cd]
-                opacities = [1.0 if c in selected_set else 0.15 for c in cd]
-                trace.marker.size = sizes
-                trace.marker.opacity = opacities
+                is_ac = isinstance(trace.meta, dict) and trace.meta.get("ac", False)
+                r, g, b = (66, 133, 244) if is_ac else (90, 90, 90)
+
+                if not selected_set:
+                    # Reset to original appearance
+                    base_color = f"rgba({r},{g},{b},0.8)"
+                    trace.marker.color = base_color
+                    trace.marker.size = 2
+                    trace.marker.opacity = 1
+                    trace.line.color = base_color
+                else:
+                    # Dim the entire original trace
+                    dim_color = f"rgba({r},{g},{b},0.05)"
+                    trace.marker.color = dim_color
+                    trace.marker.size = 1
+                    trace.marker.opacity = 1
+                    trace.line.color = dim_color
+
+                    # Build overlay traces for selected services
+                    bright_color = f"rgba({r},{g},{b},1.0)"
+                    seg_x, seg_y, seg_z, seg_hover = [], [], [], []
+
+                    for i, c in enumerate(cd):
+                        if c in selected_set:
+                            seg_x.append(trace.x[i])
+                            seg_y.append(trace.y[i])
+                            seg_z.append(trace.z[i])
+                            seg_hover.append(trace.hovertext[i] if trace.hovertext else "")
+                        else:
+                            # None gap separates services in the trace
+                            if seg_x:
+                                seg_x.append(None)
+                                seg_y.append(None)
+                                seg_z.append(None)
+                                seg_hover.append("")
+
+                    # Strip trailing None gap
+                    while seg_x and seg_x[-1] is None:
+                        seg_x.pop(); seg_y.pop(); seg_z.pop(); seg_hover.pop()
+
+                    if seg_x:
+                        fig.add_trace(go.Scatter3d(
+                            x=seg_x, y=seg_y, z=seg_z,
+                            mode="lines+markers",
+                            line=dict(color=bright_color, width=3),
+                            marker=dict(size=3, color=bright_color),
+                            hovertext=seg_hover,
+                            hoverinfo="text",
+                            name="__selected",
+                            showlegend=False,
+                        ))
             else:
-                trace.opacity = 0.35
+                trace.opacity = 0.15 if selected_set else 1
 
     def highlight_stations(self, fig, station_names):
         """Highlight events at selected stations, dim everything else.

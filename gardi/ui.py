@@ -699,29 +699,14 @@ class GardiUI:
                 dash_table.DataTable(
                     id="service-table",
                     columns=[
-                        {
-                            "name": "Service ID",
-                            "id": "service_id",
-                        },
-                        {
-                            "name": "Direction",
-                            "id": "direction",
-                        },
+                        {"name": "Service ID", "id": "service_id"},
+                        {"name": "Direction", "id": "direction"},
                         {"name": "AC?", "id": "is_ac"},
-                        {"name": "Cars", "id": "cars"},
-                        {
-                            "name": "Start",
-                            "id": "start_station",
-                        },
+                        {"name": "Line", "id": "line"},
+                        {"name": "Start", "id": "start_station"},
+                        {"name": "Start Time", "id": "start_time"},
+                        {"name": "Duration", "id": "duration", "type": "numeric"},
                         {"name": "End", "id": "end_station"},
-                        {
-                            "name": "Start Time",
-                            "id": "start_time",
-                        },
-                        {
-                            "name": "Rake Link",
-                            "id": "rake_link",
-                        },
                     ],
                     data=[],
                     row_selectable="multi",

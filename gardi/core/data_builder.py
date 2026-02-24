@@ -79,12 +79,7 @@ class DataBuilder:
             svc_id_str = ",".join(str(sid) for sid in svc.serviceId)
             start_time = fmt_time(svc.events[0].atTime) if svc.events else "--:--"
             end_time = fmt_time(svc.events[-1].atTime) if svc.events else "--:--"
-            # Find which rake link this service belongs to
-            rake_link = "?"
-            for rc in wtt.rakecycles:
-                if svc in rc.servicePath:
-                    rake_link = rc.linkName
-                    break
+            duration_min = int(svc.events[-1].atTime) - int(svc.events[0].atTime)
 
             rows.append(
                 {
@@ -92,16 +87,15 @@ class DataBuilder:
                     "service_id": svc_id_str,
                     "direction": svc.direction.name if svc.direction else "?",
                     "is_ac": "AC" if svc.needsACRake else "Non-AC",
-                    "cars": svc.rakeSizeReq if svc.rakeSizeReq else "?",
+                    "line": svc.line.name if svc.line else "?",
                     "start_station": (
                         svc.initStation.name if svc.initStation else "?"
                     ),
+                    "start_time": start_time,
+                    "duration": duration_min,
                     "end_station": (
                         svc.finalStation.name if svc.finalStation else "?"
                     ),
-                    "start_time": start_time,
-                    "traversal_time": int(svc.events[-1].atTime) -int(svc.events[0].atTime),
-                    "rake_link": rake_link,
                 }
             )
 
