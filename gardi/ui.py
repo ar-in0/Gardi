@@ -639,7 +639,7 @@ class GardiUI:
 
     def drawGraphPlaneLinkTable(self):
         return [
-            dcc.Graph(id="rake-3d-graph", style={"height": "65vh"}),
+            dcc.Graph(id="rake-3d-graph", style={"flex": "1 1 auto", "minHeight": "0"}),
             html.Div(
                 id="rake-link-table-container",
                 children=[
@@ -654,7 +654,7 @@ class GardiUI:
                         id="rake-link-table",
                         columns=[
                             {"name": "Link", "id": "linkname"},
-                            {"name": "Cars", "id": "cars"},
+                            {"name": "Cars", "id": "cars", "type": "numeric"},
                             {"name": "AC?", "id": "is_ac"},
                             {
                                 "name": "Length (km)",
@@ -662,7 +662,7 @@ class GardiUI:
                             },
                             {"name": "Start", "id": "start"},
                             {"name": "End", "id": "end"},
-                            {"name": "#Svcs", "id": "n_services"},
+                            {"name": "Duration", "id": "duration"},
                         ],
                         data=[],
                         row_selectable="multi",
@@ -680,7 +680,7 @@ class GardiUI:
                         },
                     ),
                 ],
-                style={"padding": "10px 0px"},
+                style={"padding": "10px 0px", "flex": "0 0 auto"},
             ),
         ]
 
@@ -851,7 +851,7 @@ class GardiUI:
         return html.Div(
             id="viz-container",
             children=content_children,
-            style={"position": "relative", "height": "75vh"},
+            style={"position": "relative", "height": "75vh", "display": "flex", "flexDirection": "column"},
         )
 
     def drawRightPanel(self):

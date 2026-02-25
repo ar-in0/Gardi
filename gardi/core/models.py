@@ -234,6 +234,7 @@ class TimeTable:
         for path in self.allCyclesWtt:
             sidpath = [s.serviceId[0] for s in path]
 
+        num_links_before_fix = len(self.rakecycles)
         invalid = []
         for rc in self.rakecycles:
             for path in self.allCyclesWtt:
@@ -265,13 +266,13 @@ class TimeTable:
                 svc.initStation = self.stations[svc.events[0].atStation]
                 svc.finalStation = self.stations[svc.events[-1].atStation]
 
-                # calculate service distance
                 svc.computeLengthKm()
                 rc.lengthKm += svc.lengthKm
                 svc.computeDurationMinutes()
                 rc.durationMinutes += svc.durationMinutes
-        # assign rakes to rakecycles
+
         self.assignRakes()
+        self._log_validation(num_links_before_fix, invalid)
 
     def assignRakes(self):
         for i, rc in enumerate(self.rakecycles):
@@ -285,6 +286,26 @@ class TimeTable:
                     break
             rc.rake = rake
 
+
+    def _log_validation(self, num_links_before_fix, invalid):
+        n_conflicting = len(self.conflictingLinks)
+        n_valid = len(self.rakecycles)
+
+        valid_service_ids = set()
+        for rc in self.rakecycles:
+            valid_service_ids.update(rc.serviceIds)
+        orphaned = [s for s in (self.suburbanServices or [])
+                    if not any(sid in valid_service_ids for sid in s.serviceId)]
+
+        print(f"\nRake Link Validation")
+        print(f"  Summary sheet: {num_links_before_fix} links")
+        if invalid:
+            print(f"  Discarded (services not in WTT): {len(invalid)}  [{', '.join(rc.linkName for rc in invalid)}]")
+        if n_conflicting:
+            print(f"  Discarded (path mismatch summary vs WTT): {n_conflicting}  [{', '.join(rc[0].linkName for rc in self.conflictingLinks)}]")
+        print(f"  Valid: {n_valid}")
+        if orphaned:
+            print(f"  Orphaned services: {len(orphaned)}")
 
     def printStatistics(self):
         pass
@@ -358,7 +379,7 @@ class Service:
         self.serviceId = None
         self.direction = None
         self.line = None
-        self.lineSegments = []  # [(station_name, Line)] — line markers from SWTT
+        self.lineSwitches = []  # [(station_name, Line)] — where the line type changes
 
         self.rakeLinkName = None
         self.rakeSizeReq = None
@@ -528,10 +549,12 @@ class Service:
                     self.events.append(e)
                     parser.eventsByStationMap[stName].append(e)
 
-        self.build_legs()
-
     def build_legs(self):
-        """Build ServiceLeg list from events and lineSegments."""
+        """Build ServiceLeg list from events.
+
+        svc.line is the overall classification (fast/slow/semi-fast).
+        lineSwitches stores the switch stations so each leg gets its actual line type.
+        """
         # Collapse events into (station, depart_time) tuples
         # For stations with arr+dep, keep departure time; for terminal, keep arrival
         visited = []
@@ -549,10 +572,10 @@ class Service:
             logger.debug(f"Service {sid}: {len(self.events)} events but only {len(visited)} distinct station(s) with valid times — no legs built")
             return
 
-        # Build line type lookup from lineSegments: station -> Line
+        # Build line type lookup from lineSwitches: station -> Line
         # Each marker means "from this station onward, use this line type"
         line_at = {}
-        for station, line_type in self.lineSegments:
+        for station, line_type in self.lineSwitches:
             line_at[station] = line_type
 
         # Propagate line type: walk visited stations, carry forward last known line

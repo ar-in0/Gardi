@@ -481,7 +481,7 @@ class Simulator:
         )
         def toggle_table_display(active_tab, graph_ready):
             hidden = {"display": "none"}
-            shown = {"padding": "10px 0px", "display": "block"}
+            shown = {"padding": "10px 0px", "flex": "0 0 auto"}
             if not graph_ready:
                 return hidden, hidden, hidden
 
