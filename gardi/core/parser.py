@@ -91,17 +91,54 @@ class TimeTableParser:
         seen, repeated = set(), set()
         for rc in self.wtt.rakecycles:
             suburbanIds.update(rc.serviceIds)
-            s = set(rc.serviceIds)
-            repeated |= seen & s
-            seen |= s
+            id_set = set(rc.serviceIds)
+            repeated |= seen & id_set
+            seen |= id_set
 
+        allServices = self.wtt.upServices + self.wtt.downServices
         suburbanServices = []
-        for s in (self.wtt.upServices + self.wtt.downServices):
+        excluded = []
+        for s in allServices:
             if any(sid in suburbanIds for sid in s.serviceId):
                 suburbanServices.append(s)
+            else:
+                excluded.append(s)
 
-        print(f"\nSuburban services identified: {len(suburbanServices)} / {len(self.wtt.upServices) + len(self.wtt.downServices)}")
+        self._log_parse(allServices, suburbanServices, excluded, repeated)
         return suburbanServices
+
+    def _log_parse(self, allServices, suburbanServices, excluded, repeated):
+        n_up = len(self.wtt.upServices)
+        n_down = len(self.wtt.downServices)
+        n_rc = len(self.wtt.rakecycles)
+
+        print(f"\nParse Summary")
+        print(f"  WTT columns: {n_up} UP + {n_down} DOWN = {n_up + n_down} total")
+        print(f"  Rake links: {n_rc}")
+        print(f"  Suburban (in rake links): {len(suburbanServices)}")
+        print(f"  Excluded: {len(excluded)}")
+
+        if repeated:
+            print(f"  Duplicate IDs across links: {', '.join(str(s) for s in sorted(repeated))}")
+
+        buckets = defaultdict(list)
+        for s in excluded:
+            if not s.serviceId:
+                buckets['no service ID'].append(s)
+            elif s.needsACRake:
+                buckets['AC, not in any link'].append(s)
+            elif s.zone == ServiceZone.SUBURBAN:
+                buckets['suburban, not in any link'].append(s)
+            else:
+                prefix = str(s.serviceId[0])[:2]
+                buckets[f'{prefix}xxx'].append(s)
+
+        if excluded:
+            print("  Excluded breakdown:")
+            for category in sorted(buckets.keys()):
+                svcs = buckets[category]
+                ids = ', '.join(str(s.serviceId[0]) for s in svcs if s.serviceId)
+                print(f"    {category}: {len(svcs)}  [{ids}]")
 
     # timetable.py -> class TimeTableParser
     def parseRakeLinks(self, sheet):
@@ -418,7 +455,7 @@ class TimeTableParser:
                     ids.append(matchEty.group(0))
                 else:
                     ids.append(int(re.search(r'\d+', cell).group()))
-                    if (cell.startswith("9")):
+                    if cell[:2] in ("90", "91", "92", "93", "94"):
                         zone = ServiceZone.SUBURBAN
 
             linkName = None
@@ -465,21 +502,36 @@ class TimeTableParser:
             if line_type is None:
                 continue
 
-            # Resolve station name (walk up rows if blank, same as extractInitStation)
-            stName = sheet.iat[rowIdx, 0]
+            # Resolve station by finding the nearest timing cell above in the
+            # same service column, then reading the station name from column 0
+            # at that row. This matches how operators read the WTT — the line
+            # switch applies starting from the last timed stop before the marker.
+            timing_row = None
+            for r in range(rowIdx - 1, -1, -1):
+                val = serviceCol.get(r)
+                if val is not None and not pd.isna(val):
+                    val_str = str(val).strip()
+                    if val_str and TimeTableParser.rTimePattern.match(val_str):
+                        timing_row = r
+                        break
+            if timing_row is None:
+                continue
+
+            stName = sheet.iat[timing_row, 0]
             if pd.isna(stName) or not str(stName).strip():
-                if rowIdx > 0:
-                    stName = sheet.iat[rowIdx - 1, 0]
+                if timing_row > 0:
+                    stName = sheet.iat[timing_row - 1, 0]
                 if pd.isna(stName) or not str(stName).strip():
-                    if rowIdx > 1:
-                        stName = sheet.iat[rowIdx - 2, 0]
+                    if timing_row > 1:
+                        stName = sheet.iat[timing_row - 2, 0]
             if pd.isna(stName) or not str(stName).strip():
                 continue
 
             stName = normalize_station_name(str(stName).strip().upper())
             if stName.upper() == 'STATIONS':
                 continue
-            markers.append((stName, line_type))
+            if not markers or markers[-1][1] != line_type:
+                markers.append((stName, line_type))
 
         return markers
 
@@ -525,7 +577,7 @@ class TimeTableParser:
 
             markers = self.extractLineMarkers(clean, sheet)
             if markers:
-                service.lineSegments = markers
+                service.lineSwitches = markers
                 lines_used = set(m[1] for m in markers)
                 if len(lines_used) > 1:
                     service.line = Line.SEMI_FAST

@@ -405,20 +405,22 @@ class GraphBuilder:
         if isinstance(selected_links, str):
             selected_links = [selected_links]
 
-        if not selected_links:
-            return
-
         selected_set = set(selected_links)
 
         for trace in fig.data:
             trace_link = trace.name.split("-")[0] if "-" in trace.name else trace.name
 
-            if trace_link in selected_set:
+            if not selected_set:
+                # Reset to original appearance
+                trace.opacity = 1.0
+                if hasattr(trace, "marker"):
+                    trace.marker.size = 2
+            elif trace_link in selected_set:
                 trace.opacity = 1.0
                 if hasattr(trace, "marker"):
                     trace.marker.size = 3
             else:
-                trace.opacity = 0.35
+                trace.opacity = 0.05
                 if hasattr(trace, "marker"):
                     trace.marker.size = 1
 

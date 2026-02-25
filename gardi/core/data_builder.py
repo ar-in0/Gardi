@@ -116,7 +116,7 @@ class DataBuilder:
                     "length_km": int(rc.lengthKm),
                     "start": rc.servicePath[0].initStation.name,
                     "end": rc.servicePath[-1].finalStation.name,
-                    "n_services": len(rc.servicePath),
+                    "duration": f"{int(rc.durationMinutes) // 60:02d}:{int(rc.durationMinutes) % 60:02d}",
                 }
             )
 

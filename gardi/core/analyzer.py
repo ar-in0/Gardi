@@ -40,6 +40,8 @@ class TraversalAnalyzer:
             total_services += 1
             direction = svc.direction.name if svc.direction else "UNKNOWN"
 
+            if not svc.legs:
+                svc.build_legs()
             for leg in svc.legs:
                 if (leg.from_station, leg.to_station) not in _ADJACENT_SET:
                     continue
