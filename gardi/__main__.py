@@ -26,8 +26,8 @@ def _write_output(output, args):
 
 
 def run_analyze(args):
-    if not (args.replace or args.graph_only or args.sample_traversal_times):
-        print("No analysis mode specified. Use --replace, --graph-only, or --sample-traversal-times.")
+    if not (args.replace or args.graph_only or args.sample_traversal_times or args.timing_split or args.all_services):
+        print("No analysis mode specified. Use --replace, --graph-only, --sample-traversal-times, --timing-split, or --all-services.")
         print("Run 'gardi analyze --help' for usage.")
         sys.exit(1)
 
@@ -68,6 +68,34 @@ def run_analyze(args):
         )
         _write_output(header + df.to_csv(index=False), args)
 
+    elif args.timing_split:
+        from gardi.core.analyzer import timing_split
+
+        corridor = args.timing_split.split(",")
+        if len(corridor) == 2:
+            start, end = corridor[0].strip(), corridor[1].strip()
+        else:
+            start, end = "VIRAR", "CHURCHGATE"
+
+        df, meta = timing_split(parser.wtt, start, end)
+
+        header = (
+            f"# Timing Split: {meta['corridor']}\n"
+            f"# Services matched: {meta['services_matched']}\n"
+        )
+        _write_output(header + df.to_csv(index=False), args)
+
+    elif args.all_services:
+        from gardi.core.analyzer import all_services
+
+        df, meta = all_services(parser.wtt)
+
+        header = (
+            f"# All Services\n"
+            f"# Services: {meta['service_count']}\n"
+        )
+        _write_output(header + df.to_csv(index=False), args)
+
 
 
 def main():
@@ -93,6 +121,10 @@ def main():
     mode.add_argument('--replace', help='AC replacement analysis for given rakelinks (e.g. A,B,C)')
     mode.add_argument('--graph-only', action='store_true', help='Dump full rakelink followings graph')
     mode.add_argument('--sample-traversal-times', action='store_true', help='Inter-station run times from ServiceLeg data')
+    mode.add_argument('--timing-split', nargs='?', const='VIRAR,CHURCHGATE', metavar='CORRIDOR',
+                      help='Per-service corridor timings (default: VIRAR,CHURCHGATE)')
+    mode.add_argument('--all-services', action='store_true',
+                      help='List all services with line type and switching info')
 
     analyze_parser.add_argument('--station', help='With --replace, show arrival sequence at a station (e.g. DADAR)')
     analyze_parser.add_argument('--peak', action='store_true', help='With --station, restrict to peak hours only')

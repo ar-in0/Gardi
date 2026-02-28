@@ -715,7 +715,7 @@ class Simulator:
                 for st in selected_stations
             ]
             header = html.Div(
-                " · ".join(labels),
+                " * ".join(labels),
                 style={
                     "fontWeight": "600",
                     "fontSize": "13px",

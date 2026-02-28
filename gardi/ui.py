@@ -33,7 +33,7 @@ def build_service_row(svc, draw_connector):
                 svc_id_str, style={"minWidth": "56px", "display": "inline-block"}
             ),
             html.Span(
-                f"{svc.initStation.name} → {svc.finalStation.name} ({svc.direction})",
+                f"{svc.initStation.name} -> {svc.finalStation.name} ({svc.direction})",
                 style={"marginLeft": "6px"},
             ),
             html.Span(

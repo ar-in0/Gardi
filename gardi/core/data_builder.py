@@ -493,7 +493,7 @@ class DataBuilder:
         # Sort all rows chronologically
         all_rows.sort(key=lambda r: r["time_raw"])
 
-        # Build bidirectional gap bar: ■·│ chars, 7 per side + center │
+        # Build bidirectional gap bar: ■*│ chars, 7 per side + center │
         max_gap = max(all_gap_values) if all_gap_values else 1
         half_w = 7
         for row in all_rows:

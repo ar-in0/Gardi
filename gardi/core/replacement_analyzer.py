@@ -15,8 +15,8 @@ from gardi.core.models import (
 STATIONS_ORDERED = sorted(DISTANCE_MAP.keys(), key=lambda s: DISTANCE_MAP[s])
 
 # Peak windows (minutes since midnight)
-PEAK_MORNING = (480, 660)   # 08:00–11:00
-PEAK_EVENING = (1020, 1230) # 17:00–20:30
+PEAK_MORNING = (480, 660)   # 08:00-11:00
+PEAK_EVENING = (1020, 1230) # 17:00-20:30
 
 
 @dataclass
@@ -51,7 +51,7 @@ class ReplacementReport:
     semi_fast: dict
     coverage: dict
     followings: dict
-    profiles: dict                    # link name → RakeLinkProfile
+    profiles: dict                    # link name -> RakeLinkProfile
     station_arrivals: list = None     # ArrivalEntry list if station specified
 
 
@@ -61,11 +61,11 @@ class ReplacementAnalyzer:
     def __init__(self, wtt, parser):
         self.wtt = wtt
 
-        # rakelink name → RakeCycle
+        # rakelink name -> RakeCycle
         self.rc_by_name = {}
-        # service_id (str) → rakelink name
+        # service_id (str) -> rakelink name
         self.svc_to_link = {}
-        # rakelink name → RakeLinkProfile
+        # rakelink name -> RakeLinkProfile
         self.profiles = {}
 
         self._index_rakelinks()
@@ -206,7 +206,7 @@ class ReplacementAnalyzer:
         }
 
     def semi_fast_check(self, replacement_set):
-        """Link → list of semi-fast service IDs."""
+        """Link -> list of semi-fast service IDs."""
         result = {}
         for name in replacement_set:
             rc = self.rc_by_name.get(name)
@@ -219,7 +219,7 @@ class ReplacementAnalyzer:
         return result
 
     def coverage_matrix(self, replacement_set, by_station):
-        """Station × rakelink service count matrix.
+        """Station x rakelink service count matrix.
 
         Only includes stations from DISTANCE_MAP, ordered by corridor distance.
         """
@@ -345,7 +345,7 @@ class ReplacementAnalyzer:
             f"  Total weight: {sum(edges.values())}",
             "",
             "  Top 20 edges by weight:",
-            *[f"    {a}–{b}: {w}" for (a, b), w in top],
+            *[f"    {a}-{b}: {w}" for (a, b), w in top],
             "",
             "  Top 10 nodes by weighted degree:",
             *[f"    {node}: degree={degrees[node]}, weight={wd}" for node, wd in top_nodes],

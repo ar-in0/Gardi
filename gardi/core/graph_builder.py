@@ -171,7 +171,7 @@ class GraphBuilder:
                 xaxis=dict(
                     showgrid=True,
                     showspikes=False,
-                    title="Time of Day →",
+                    title="Time of Day ->",
                     range=[x_start, x_end],
                     tickvals=tickPositions,
                     ticktext=tickLabels,
@@ -504,7 +504,7 @@ class GraphBuilder:
             hoverinfo="skip",
         ))
 
-        # Zoom X-axis to encompass all matched events ±30min
+        # Zoom X-axis to encompass all matched events +/-30min
         x_times = [p[0] for p in matched_points]
         x_start = min(x_times) - 30
         x_end = max(x_times) + 30

@@ -217,7 +217,7 @@ class Gardi:
                     style={"fontWeight": "600", "marginBottom": "4px"},
                 ),
                 html.Div(
-                    f"{svc.direction.name} | {svc.initStation.name} → {svc.finalStation.name}",
+                    f"{svc.direction.name} | {svc.initStation.name} -> {svc.finalStation.name}",
                     style={"fontSize": "12px", "color": "#64748b"},
                 ),
                 html.Div(
@@ -273,10 +273,10 @@ class Gardi:
                     [
                         html.Span(f"Rake {rc.linkName}", style={"fontWeight": "600"}),
                         html.Span(
-                            f"  · {len(services)} services ·  ",
+                            f"  * {len(services)} services *  ",
                             style={"color": "#64748b"},
                         ),
-                        html.Span(f"{start} → {end}"),
+                        html.Span(f"{start} -> {end}"),
                         html.Span(
                             f"  {'AC' if ac == len(services) else 'Non-AC' if ac == 0 else 'Mixed AC'}",
                             style={"marginLeft": "6px", "color": "#475569"},
