@@ -1,5 +1,6 @@
 # gardi/core/parser.py
 
+import logging
 import re
 import time
 import pandas as pd
@@ -186,13 +187,12 @@ class TimeTableParser:
                         # Absolute column index is col_offset + 2
                         raw_line = lineRow.iloc[col_offset + 2]
                         if not pd.isna(raw_line):
-                            val = str(raw_line).strip()
-                            # Mark with label if match, else store raw string
-                            if val.upper() in ["FAST", "SLOW"]:
-                                line_label = val.upper()
-                            else:
-                                if "FAST" in val.upper() or "SLOW" in val.upper():
-                                    line_label = val
+                            val = str(raw_line).strip().upper()
+                            # Semi-fast not in summary sheet; detected from WTT markers in extractLineMarkers()
+                            if "FAST" in val:
+                                line_label = "FAST"
+                            elif "SLOW" in val:
+                                line_label = "SLOW"
 
 
                     service_entries.append((sid_val, line_label))
@@ -207,7 +207,9 @@ class TimeTableParser:
                 service = next((s for s in allServices if str(sid) in str(s.serviceId)), None)
                 if service:
                     service.rakeLinkName = linkName
-                    if service.line is None:  # SWTT markers take priority
+                    if service.line is None and speed is not None:
+                        # No WTT line markers — fall back to summary sheet annotation
+                        logging.debug(f"Service {sid}: no WTT line annotation, using summary sheet value '{speed}'")
                         if speed == "FAST":
                             service.line = Line.THROUGH
                         elif speed == "SLOW":
