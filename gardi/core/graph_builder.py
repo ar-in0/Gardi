@@ -3,7 +3,6 @@
 import plotly.graph_objs as go
 from gardi.core.filters import FilterType
 from gardi.core.models import DISTANCE_MAP
-from gardi.core import utils
 
 
 class GraphBuilder:
@@ -249,19 +248,6 @@ class GraphBuilder:
             for svc in rc.servicePath:
                 if i < len(wtt.rakecycles) / 2 + 10:
                     svc.needsACRake = True
-
-        before = utils.corridorMixingMinimal(
-            query.startStation, query.endStation, query.inTimePeriod[0], query.inTimePeriod[1],
-            parser.eventsByStationMap, parser.distanceMap
-        )
-        after = utils.corridorMixingMinimal(
-            query.startStation, query.endStation, query.inTimePeriod[0], query.inTimePeriod[1],
-            parser.eventsByStationMap, parser.distanceMap
-        )
-
-        print("=== Mixing Report ===")
-        for b, a in zip(before, after):
-            print(f"{b['station']}: {b['mixing_score']:.3f} -> {a['mixing_score']:.3f}")
 
         return fig
 

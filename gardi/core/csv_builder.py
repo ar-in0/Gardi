@@ -1,4 +1,4 @@
-"""Inter-station traversal time analyzer for WTT data."""
+"""Centralized CSV export builder for WTT data."""
 
 import statistics
 from collections import defaultdict
@@ -21,6 +21,14 @@ _ADJACENT_SET = set()
 for a, b, _ in ADJACENT_PAIRS:
     _ADJACENT_SET.add((a, b))
     _ADJACENT_SET.add((b, a))
+
+
+def _fmt(t):
+    """Format minutes since midnight to HH:MM."""
+    if t is None:
+        return "--:--"
+    t = int(round(t))
+    return f"{t // 60:02.0f}:{t % 60:02.0f}"
 
 
 class TraversalAnalyzer:
@@ -87,7 +95,7 @@ class TraversalAnalyzer:
         return df, metadata
 
 
-def timing_split(wtt, start="VIRAR", end="CHURCHGATE"):
+def timingSplit(wtt, start="VIRAR", end="CHURCHGATE"):
     """Per-service timing for a corridor.
 
     Returns (DataFrame, metadata_dict). Each row is one service that covers
@@ -168,7 +176,7 @@ def timing_split(wtt, start="VIRAR", end="CHURCHGATE"):
     return df, metadata
 
 
-def all_services(wtt):
+def allServices(wtt):
     """List all services with line type and switching station info.
 
     Returns (DataFrame, metadata_dict).
@@ -216,9 +224,89 @@ def all_services(wtt):
     return df, metadata
 
 
-def _fmt(t):
-    """Format minutes since midnight to HH:MM."""
-    if t is None:
-        return "--:--"
-    t = int(round(t))
-    return f"{t // 60:02.0f}:{t % 60:02.0f}"
+def turnaround(wtt, station):
+    """Turnaround time distribution at a terminal station.
+
+    Returns (DataFrame, metadata_dict). Each row is one service that
+    arrives at the given station and has a terminal departure event.
+    """
+    station = station.upper()
+    if station not in DISTANCE_MAP:
+        raise ValueError(f"Unknown station: {station}")
+
+    services = wtt.suburbanServices or (wtt.upServices + wtt.downServices)
+    rows = []
+
+    for svc in services:
+        if not svc.events or len(svc.events) < 2:
+            continue
+        last = svc.events[-1]
+        second_last = svc.events[-2]
+        if (last.isTerminalDeparture
+                and second_last.atStation == station
+                and second_last.atTime is not None
+                and last.atTime is not None):
+            turn_mins = last.atTime - second_last.atTime
+            if turn_mins < 0:
+                turn_mins += 1440
+            rows.append({
+                "arrivalTime": _fmt(second_last.atTime),
+                "turnaroundMins": round(turn_mins),
+            })
+
+    rows.sort(key=lambda r: r["arrivalTime"])
+    df = pd.DataFrame(rows)
+
+    median_turn = round(statistics.median(r["turnaroundMins"] for r in rows), 1) if rows else 0
+    metadata = {
+        "station": station,
+        "total_turnarounds": len(rows),
+        "median_turnaround_mins": median_turn,
+    }
+    return df, metadata
+
+
+class CsvBuilder:
+    """Centralized CSV export with headers for CLI and UI use."""
+
+    def __init__(self):
+        self._traversal = TraversalAnalyzer()
+
+    def traversalTimes(self, wtt):
+        """Return CSV string with header for traversal time analysis."""
+        df, meta = self._traversal.analyze(wtt)
+        header = (
+            f"# Traversal Time Analysis\n"
+            f"# Services sampled: {meta['total_services_sampled']}\n"
+            f"# Station pairs: {meta['pair_count']}\n"
+            f"# Pairs with <10 samples: {meta['pairs_with_low_samples']}\n"
+        )
+        return header + df.to_csv(index=False)
+
+    def timingSplit(self, wtt, start="VIRAR", end="CHURCHGATE"):
+        """Return CSV string with header for corridor timing split."""
+        df, meta = timingSplit(wtt, start, end)
+        header = (
+            f"# Timing Split: {meta['corridor']}\n"
+            f"# Services matched: {meta['services_matched']}\n"
+        )
+        return header + df.to_csv(index=False)
+
+    def allServices(self, wtt):
+        """Return CSV string with header for all services listing."""
+        df, meta = allServices(wtt)
+        header = (
+            f"# All Services\n"
+            f"# Services: {meta['service_count']}\n"
+        )
+        return header + df.to_csv(index=False)
+
+    def turnaround(self, wtt, station):
+        """Return CSV string with header for turnaround time analysis."""
+        df, meta = turnaround(wtt, station)
+        header = (
+            f"# Turnaround Times: {meta['station']}\n"
+            f"# Total turnarounds: {meta['total_turnarounds']}\n"
+            f"# Median turnaround: {meta['median_turnaround_mins']} mins\n"
+        )
+        return header + df.to_csv(index=False)

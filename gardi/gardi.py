@@ -7,7 +7,7 @@ from gardi.core.filters import FilterType, FilterQuery, FilterEngine
 from gardi.core.graph_builder import GraphBuilder
 from gardi.core.data_builder import DataBuilder, fmt_time
 from gardi.core.rake_operations import RakeOperations
-from gardi.core.analyzer import TraversalAnalyzer
+from gardi.core.csv_builder import CsvBuilder
 from gardi.ui import build_service_row
 
 
@@ -35,7 +35,7 @@ class Gardi:
         self.graph_builder = GraphBuilder()
         self.data_builder = DataBuilder()
         self.rake_ops = RakeOperations()
-        self.traversal_analyzer = TraversalAnalyzer()
+        self.csv_builder = CsvBuilder()
 
     def initialize_parser(self, wtt_file_obj):
         """Parse WTT, register stations, return station options."""
@@ -338,18 +338,8 @@ class Gardi:
             ]
         )
 
-    def compute_traversal_analysis(self):
-        return self.traversal_analyzer.analyze(self.parser.wtt)
-
     def export_traversal_csv(self):
-        df, meta = self.compute_traversal_analysis()
-        header = (
-            f"# Traversal Time Analysis\n"
-            f"# Services sampled: {meta['total_services_sampled']}\n"
-            f"# Station pairs: {meta['pair_count']}\n"
-            f"# Pairs with <10 samples: {meta['pairs_with_low_samples']}\n"
-        )
-        return header + df.to_csv(index=False)
+        return self.csv_builder.traversalTimes(self.parser.wtt)
 
     def is_valid_xlsx(self, filename):
         return bool(filename) and filename.lower().endswith(".xlsx")

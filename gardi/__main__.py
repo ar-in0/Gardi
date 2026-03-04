@@ -16,19 +16,25 @@ def _parse_and_build(args):
     return parser
 
 
-def _write_output(output, args):
-    if args.output:
-        with open(args.output, 'w') as f:
+def _write_output(output, args, auto_name=None):
+    dest = args.output
+    if dest == "auto":
+        if not auto_name:
+            print("Error: no auto-name defined for this report.")
+            sys.exit(1)
+        dest = auto_name
+
+    if dest:
+        with open(dest, 'w') as f:
             f.write(output)
-        print(f"Written to {args.output}")
+        print(f"Written to {dest}")
     else:
         print(output)
 
 
 def run_analyze(args):
-    if not (args.replace or args.graph_only or args.sample_traversal_times or args.timing_split or args.all_services):
-        print("No analysis mode specified. Use --replace, --graph-only, --sample-traversal-times, --timing-split, or --all-services.")
-        print("Run 'gardi analyze --help' for usage.")
+    if not (args.replace or args.graph_only or args.turnaround):
+        print("No analysis mode specified. Use --replace, --graph-only, or --turnaround.")
         sys.exit(1)
 
     parser = _parse_and_build(args)
@@ -46,56 +52,48 @@ def run_analyze(args):
             sys.exit(1)
 
         report = ra.evaluate(replacement_set, peak_only=args.peak, station=args.station)
-        _write_output(format_report(report), args)
+        auto = f"replace_{'_'.join(replacement_set).lower()}.txt"
+        _write_output(format_report(report), args, auto_name=auto)
 
     elif args.graph_only:
         from gardi.core.replacement_analyzer import ReplacementAnalyzer
 
         ra = ReplacementAnalyzer(parser.wtt, parser)
-        _write_output(ra.graph_summary(), args)
+        _write_output(ra.graph_summary(), args, auto_name="rakelink_graph.txt")
 
-    elif args.sample_traversal_times:
-        from gardi.core.analyzer import TraversalAnalyzer
+    elif args.turnaround:
+        from gardi.core.csv_builder import CsvBuilder
 
-        analyzer = TraversalAnalyzer()
-        df, meta = analyzer.analyze(parser.wtt)
+        if not args.station:
+            print("Error: --station is required for --turnaround.")
+            sys.exit(1)
+        builder = CsvBuilder()
+        output = builder.turnaround(parser.wtt, args.station)
+        _write_output(output, args, auto_name=f"turnaround_{args.station.lower()}.csv")
 
-        header = (
-            f"# Traversal Time Analysis\n"
-            f"# Services sampled: {meta['total_services_sampled']}\n"
-            f"# Station pairs: {meta['pair_count']}\n"
-            f"# Pairs with <10 samples: {meta['pairs_with_low_samples']}\n"
-        )
-        _write_output(header + df.to_csv(index=False), args)
 
-    elif args.timing_split:
-        from gardi.core.analyzer import timing_split
+def runCsv(args):
+    from gardi.core.csv_builder import CsvBuilder
 
-        corridor = args.timing_split.split(",")
+    parser = _parse_and_build(args)
+    builder = CsvBuilder()
+
+    if args.report_type == "sectional-times":
+        output = builder.traversalTimes(parser.wtt)
+        auto = "sectional_times.csv"
+    elif args.report_type == "service-runtimes":
+        corridor = args.corridor.split(",")
         if len(corridor) == 2:
             start, end = corridor[0].strip(), corridor[1].strip()
         else:
             start, end = "VIRAR", "CHURCHGATE"
+        output = builder.timingSplit(parser.wtt, start, end)
+        auto = f"service_runtimes_{start.lower()}_{end.lower()}.csv"
+    elif args.report_type == "service-switches":
+        output = builder.allServices(parser.wtt)
+        auto = "service_switches.csv"
 
-        df, meta = timing_split(parser.wtt, start, end)
-
-        header = (
-            f"# Timing Split: {meta['corridor']}\n"
-            f"# Services matched: {meta['services_matched']}\n"
-        )
-        _write_output(header + df.to_csv(index=False), args)
-
-    elif args.all_services:
-        from gardi.core.analyzer import all_services
-
-        df, meta = all_services(parser.wtt)
-
-        header = (
-            f"# All Services\n"
-            f"# Services: {meta['service_count']}\n"
-        )
-        _write_output(header + df.to_csv(index=False), args)
-
+    _write_output(output, args, auto_name=auto)
 
 
 def main():
@@ -120,14 +118,29 @@ def main():
     mode = analyze_parser.add_mutually_exclusive_group()
     mode.add_argument('--replace', help='AC replacement analysis for given rakelinks (e.g. A,B,C)')
     mode.add_argument('--graph-only', action='store_true', help='Dump full rakelink followings graph')
-    mode.add_argument('--sample-traversal-times', action='store_true', help='Inter-station run times from ServiceLeg data')
-    mode.add_argument('--timing-split', nargs='?', const='VIRAR,CHURCHGATE', metavar='CORRIDOR',
-                      help='Per-service corridor timings (default: VIRAR,CHURCHGATE)')
-    mode.add_argument('--all-services', action='store_true',
-                      help='List all services with line type and switching info')
+    mode.add_argument('--turnaround', action='store_true', help='Turnaround time distribution at a station (requires --station)')
 
-    analyze_parser.add_argument('--station', help='With --replace, show arrival sequence at a station (e.g. DADAR)')
-    analyze_parser.add_argument('--peak', action='store_true', help='With --station, restrict to peak hours only')
+    analyze_parser.add_argument('--station', help='Station name (e.g. DADAR). Used with --replace or --turnaround')
+    analyze_parser.add_argument('--peak', action='store_true', help='With --replace --station, restrict to peak hours only')
+
+    # csv subcommand
+    csv_parser = subparsers.add_parser(
+        'csv', help='CSV data exports',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "report types:\n"
+            "  sectional-times   Median run time between adjacent station pairs, by direction\n"
+            "  service-runtimes  Per-service corridor timing: start, end, duration (use --corridor)\n"
+            "  service-switches  All services with line type, direction, and line-switch stations"
+        ),
+    )
+    csv_parser.add_argument('wtt_file', help='Path to WTT Excel file')
+    csv_parser.add_argument('summary_file', help='Path to WTT Link Summary Excel file')
+    csv_parser.add_argument('report_type', choices=['sectional-times', 'service-runtimes', 'service-switches'],
+                            help='Type of CSV report to generate')
+    csv_parser.add_argument('-o', '--output', help='Output file (default: stdout)')
+    csv_parser.add_argument('--corridor', default='VIRAR,CHURCHGATE',
+                            help='Start,End stations for service-runtimes (default: VIRAR,CHURCHGATE)')
 
     args = top.parse_args()
 
@@ -135,6 +148,8 @@ def main():
         run_server(args)
     elif args.command == 'analyze':
         run_analyze(args)
+    elif args.command == 'csv':
+        runCsv(args)
     else:
         top.print_help()
 
