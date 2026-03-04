@@ -427,8 +427,13 @@ class Service:
             return
 
         end = qq.endStation
-        last = self.events[-1].atStation
-        t_last = self.events[-1].atTime
+        # Use last non-terminal-departure event for end station check
+        effective_events = [e for e in self.events if not e.isTerminalDeparture]
+        if not effective_events:
+            self.render = False
+            return
+        last = effective_events[-1].atStation
+        t_last = effective_events[-1].atTime
         t_lower, t_upper = qq.inTimePeriod
 
         if last == end:
@@ -549,6 +554,14 @@ class Service:
                     self.events.append(e)
                     parser.eventsByStationMap[stName].append(e)
 
+        # Flag terminal departure (turnaround idle time).
+        # The outer loop may re-parse the departure row as an ARRIVAL event,
+        # so we detect by same-station duplicate at the end, not by eType.
+        if (len(self.events) >= 2
+                and self.events[-1].atStation == self.events[-2].atStation
+                and self.events[-1].atTime > self.events[-2].atTime):
+            self.events[-1].isTerminalDeparture = True
+
     def build_legs(self):
         """Build ServiceLeg list from events.
 
@@ -630,6 +643,7 @@ class StationEvent:
         self.platform = None
         self.eType = type
         self.render = True
+        self.isTerminalDeparture = False
 
     def _timeToMinutes(self, time_str):
         '''Convert time string to minutes since midnight, with wrap-around.'''

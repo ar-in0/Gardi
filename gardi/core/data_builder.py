@@ -77,9 +77,10 @@ class DataBuilder:
                 continue
 
             svc_id_str = ",".join(str(sid) for sid in svc.serviceId)
-            start_time = fmt_time(svc.events[0].atTime) if svc.events else "--:--"
-            end_time = fmt_time(svc.events[-1].atTime) if svc.events else "--:--"
-            duration_min = int(svc.events[-1].atTime) - int(svc.events[0].atTime)
+            svc_events = [e for e in svc.events if not e.isTerminalDeparture]
+            start_time = fmt_time(svc_events[0].atTime) if svc_events else "--:--"
+            end_time = fmt_time(svc_events[-1].atTime) if svc_events else "--:--"
+            duration_min = int(svc_events[-1].atTime) - int(svc_events[0].atTime)
 
             rows.append(
                 {

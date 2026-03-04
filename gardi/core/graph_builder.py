@@ -47,6 +47,8 @@ class GraphBuilder:
                     has_points = False
 
                     for ev in svc.events:
+                        if ev.isTerminalDeparture:
+                            continue
                         stName = str(ev.atStation).strip().upper()
                         if stName not in stationToY:
                             continue
