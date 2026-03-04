@@ -1,6 +1,11 @@
 import sys
+import os
 import argparse
 from gardi.simulator import Simulator
+
+_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+DEFAULT_WTT = os.path.join(_DATA_DIR, 'SWTT-78_ADDITIONAL_AC_SERVICES_27_NOV_2024-1.xlsx')
+DEFAULT_SUMMARY = os.path.join(_DATA_DIR, 'LINK_SWTT_78_UPDATED_05.11.2024-4.xlsx')
 
 
 def run_server(args):
@@ -111,8 +116,8 @@ def main():
 
     # analyze subcommand
     analyze_parser = subparsers.add_parser('analyze', help='WTT analysis tools')
-    analyze_parser.add_argument('wtt_file', help='Path to WTT Excel file')
-    analyze_parser.add_argument('summary_file', help='Path to WTT Link Summary Excel file')
+    analyze_parser.add_argument('wtt_file', nargs='?', default=DEFAULT_WTT, help='Path to WTT Excel file (default: data/)')
+    analyze_parser.add_argument('summary_file', nargs='?', default=DEFAULT_SUMMARY, help='Path to WTT Link Summary Excel file (default: data/)')
     analyze_parser.add_argument('-o', '--output', help='Output file (default: stdout)')
 
     mode = analyze_parser.add_mutually_exclusive_group()
@@ -134,8 +139,8 @@ def main():
             "  service-switches  All services with line type, direction, and line-switch stations"
         ),
     )
-    csv_parser.add_argument('wtt_file', help='Path to WTT Excel file')
-    csv_parser.add_argument('summary_file', help='Path to WTT Link Summary Excel file')
+    csv_parser.add_argument('wtt_file', nargs='?', default=DEFAULT_WTT, help='Path to WTT Excel file (default: data/)')
+    csv_parser.add_argument('summary_file', nargs='?', default=DEFAULT_SUMMARY, help='Path to WTT Link Summary Excel file (default: data/)')
     csv_parser.add_argument('report_type', choices=['sectional-times', 'service-runtimes', 'service-switches'],
                             help='Type of CSV report to generate')
     csv_parser.add_argument('-o', '--output', help='Output file (default: stdout)')
