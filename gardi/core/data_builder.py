@@ -94,6 +94,7 @@ class DataBuilder:
                     ),
                     "start_time": start_time,
                     "duration": duration_min,
+                    "end_time": end_time,
                     "end_station": (
                         svc.finalStation.name if svc.finalStation else "?"
                     ),

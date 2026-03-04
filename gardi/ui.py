@@ -705,6 +705,7 @@ class GardiUI:
                         {"name": "Line", "id": "line"},
                         {"name": "Start", "id": "start_station"},
                         {"name": "Start Time", "id": "start_time"},
+                        {"name": "End Time", "id": "end_time"},
                         {"name": "Duration", "id": "duration", "type": "numeric"},
                         {"name": "End", "id": "end_station"},
                     ],
