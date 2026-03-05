@@ -252,9 +252,10 @@ class Simulator:
                 Output("intermediate-stations_service", "options"),
             ],
             Input("upload-wtt-inline", "contents"),
+            State("upload-wtt-inline", "filename"),
         )
-        def init_filters(wttContents):
-            if not self.gardi.is_valid_xlsx(self.gardi.wttFileName):
+        def init_filters(wttContents, wttFilename):
+            if not self.gardi.is_valid_xlsx(wttFilename):
                 raise PreventUpdate
             if not wttContents:
                 return None, [], [], [], [], [], []
@@ -285,15 +286,16 @@ class Simulator:
                 Input("app-state", "data"),
                 Input("upload-summary-inline", "contents"),
             ],
+            State("upload-summary-inline", "filename"),
             prevent_initial_call=True,
         )
-        def init_backend(app_state, summaryContents):
+        def init_backend(app_state, summaryContents, summaryFilename):
             if not app_state or not app_state.get("initialized"):
                 raise PreventUpdate
             if summaryContents is None:
                 return False
 
-            if not self.gardi.is_valid_xlsx(self.gardi.summaryFileName):
+            if not self.gardi.is_valid_xlsx(summaryFilename):
                 raise PreventUpdate
 
             try:
