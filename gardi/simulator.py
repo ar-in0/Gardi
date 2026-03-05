@@ -919,16 +919,27 @@ class Simulator:
 
         @self.app.callback(
             Output("download-report", "data"),
-            Input("export-button", "n_clicks"),
+            Input("export-xlsx-item", "n_clicks"),
             prevent_initial_call=True,
         )
-        def trigger_download(n_clicks):
+        def trigger_xlsx_download(n_clicks):
             filter_type = self.gardi.query.type.value if self.gardi.query.type else "unknown"
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename_xlsx = f"WTT_Export_{filter_type}_{timestamp}.xlsx"
 
             report_xlsx = self.gardi.export_xlsx()
             return dcc.send_data_frame(report_xlsx.to_excel, filename_xlsx, index=False)
+
+        @self.app.callback(
+            Output("download-pattern-csv", "data"),
+            Input("export-pattern-item", "n_clicks"),
+            prevent_initial_call=True,
+        )
+        def trigger_pattern_download(n_clicks):
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"Pattern_Segments_{timestamp}.csv"
+            csv_string = self.gardi.export_pattern_csv()
+            return dcc.send_string(csv_string, filename)
 
     def run(self, host, port):
         self.app.run(debug=self.debug, host=host, port=port)

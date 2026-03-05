@@ -341,5 +341,8 @@ class Gardi:
     def export_traversal_csv(self):
         return self.csv_builder.traversalTimes(self.parser.wtt)
 
+    def export_pattern_csv(self):
+        return self.csv_builder.patternSegments(self.parser.wtt)
+
     def is_valid_xlsx(self, filename):
         return bool(filename) and filename.lower().endswith(".xlsx")

@@ -624,11 +624,21 @@ class GardiUI:
                     style={"marginLeft": "4px", "display": "None"},
                 ),
                 html.Div(
-                    dbc.Button(
-                        "Export Summary",
+                    dbc.DropdownMenu(
+                        label="Export",
+                        children=[
+                            dbc.DropdownMenuItem(
+                                "Export Summary (XLSX)",
+                                id="export-xlsx-item",
+                            ),
+                            dbc.DropdownMenuItem(
+                                "Export Pattern Segments (CSV)",
+                                id="export-pattern-item",
+                            ),
+                        ],
                         id="export-button",
                         color="secondary",
-                        outline=True,
+                        size="sm",
                         disabled=True,
                     ),
                     className="ms-auto",
@@ -862,6 +872,7 @@ class GardiUI:
                 html.Div(id="status-div", className="text-box"),
                 self.drawExportButtonRow(),
                 dcc.Download(id="download-report"),
+                dcc.Download(id="download-pattern-csv"),
                 self.drawDynamicContent(),
                 html.Div(id="right-panel-content", style={"marginTop": "10px"}),
             ],

@@ -1,11 +1,25 @@
 """Centralized CSV export builder for WTT data."""
 
+import json
+import logging
 import statistics
 from collections import defaultdict
+from pathlib import Path
 
 import pandas as pd
 
 from gardi.core.models import DISTANCE_MAP, Line
+
+logger = logging.getLogger(__name__)
+
+# Map pattern-file station names to DISTANCE_MAP station names
+PATTERN_STATION_MAP = {
+    "Mumbai Central": "M'BAI CENTRAL(L)",
+    "Mahim Junction": "MAHIM JN.",
+    "Nalla Sopara": "NALLASOPARA",
+    "Santacruz": "SANTA CRUZ",
+    "Kandivli": "KANDIVALI",
+}
 
 
 # Ordered station list derived from DISTANCE_MAP
@@ -266,11 +280,59 @@ def turnaround(wtt, station):
     return df, metadata
 
 
+def _resolve_station(name):
+    """Convert a pattern station name to DISTANCE_MAP key."""
+    return PATTERN_STATION_MAP.get(name, name.upper())
+
+
+def _load_patterns():
+    """Load and resolve patterns.json into usable structures.
+
+    Returns dict: pattern_name -> {
+        'type': int,
+        'segment_keys': [str, ...],
+        'segments': [(from_station, to_station), ...],
+        'stations': [str, ...],  # ordered station chain
+    }
+    """
+    patterns_path = Path(__file__).resolve().parent.parent.parent / "patterns.json"
+    with open(patterns_path) as f:
+        raw = json.load(f)
+
+    # Build segment lookup: key -> (from_station, to_station)
+    seg_lookup = {}
+    for key, desc in raw.get("fast_segments", {}).items():
+        parts = desc.split("-", 1)
+        seg_lookup[key] = (_resolve_station(parts[0]), _resolve_station(parts[1]))
+    for key, desc in raw.get("slow_segments", {}).items():
+        parts = desc.split("-", 1)
+        seg_lookup[key] = (_resolve_station(parts[0]), _resolve_station(parts[1]))
+
+    # Build resolved patterns
+    patterns = {}
+    for name, info in raw.get("patterns", {}).items():
+        seg_keys = info["segments"]
+        segments = [seg_lookup[k] for k in seg_keys]
+        # Build ordered station chain from segments
+        stations = [segments[0][0]]
+        for seg in segments:
+            stations.append(seg[1])
+        patterns[name] = {
+            "type": info["type"],
+            "segment_keys": seg_keys,
+            "segments": segments,
+            "stations": stations,
+        }
+
+    return patterns, raw
+
+
 class CsvBuilder:
     """Centralized CSV export with headers for CLI and UI use."""
 
     def __init__(self):
         self._traversal = TraversalAnalyzer()
+        self._patterns_cache = None
 
     def traversalTimes(self, wtt):
         """Return CSV string with header for traversal time analysis."""
@@ -310,3 +372,146 @@ class CsvBuilder:
             f"# Median turnaround: {meta['median_turnaround_mins']} mins\n"
         )
         return header + df.to_csv(index=False)
+
+    def _get_patterns(self):
+        """Lazy-load and cache patterns."""
+        if self._patterns_cache is None:
+            self._patterns_cache, self._patterns_raw = _load_patterns()
+        return self._patterns_cache
+
+    def patternSegments(self, wtt):
+        """Match rendered services to route patterns and compute per-segment durations.
+
+        Returns CSV string. Each row is a (service, pattern) match with per-segment
+        duration columns.
+        """
+        patterns = self._get_patterns()
+        services = wtt.suburbanServices or (wtt.upServices + wtt.downServices)
+
+        # Collect all unique segment keys across all patterns for column ordering
+        all_seg_keys = []
+        seen_keys = set()
+        for pinfo in patterns.values():
+            for k in pinfo["segment_keys"]:
+                if k not in seen_keys:
+                    all_seg_keys.append(k)
+                    seen_keys.add(k)
+
+        # Build segment labels from raw data
+        raw = self._patterns_raw
+        seg_labels = {}
+        for k, desc in raw.get("fast_segments", {}).items():
+            seg_labels[k] = desc
+        for k, desc in raw.get("slow_segments", {}).items():
+            seg_labels[k] = desc
+
+        rows = []
+        for svc in services:
+            if not svc.render:
+                continue
+            if not svc.events or len(svc.events) < 2:
+                continue
+            if not svc.legs:
+                svc.build_legs()
+
+            # Build station sequence from legs
+            svc_stations = [svc.legs[0].from_station]
+            for leg in svc.legs:
+                svc_stations.append(leg.to_station)
+
+            for pat_name, pinfo in patterns.items():
+                # Filter by line type: fast patterns (type>0) for fast services,
+                # slow patterns (type<0) for slow services, semi-fast matches both
+                pat_type = pinfo["type"]
+                if svc.line == Line.THROUGH and pat_type < 0:
+                    continue
+                if svc.line == Line.LOCAL and pat_type > 0:
+                    continue
+
+                pat_stations = pinfo["stations"]
+
+                # Check if service covers all pattern stations in order
+                si = 0
+                for ps in pat_stations:
+                    found = False
+                    while si < len(svc_stations):
+                        if svc_stations[si] == ps:
+                            found = True
+                            si += 1
+                            break
+                        si += 1
+                    if not found:
+                        break
+                else:
+                    # Match found - compute per-segment durations
+                    seg_durations = {}
+                    leg_idx = 0
+                    for seg_key, (seg_from, seg_to) in zip(pinfo["segment_keys"], pinfo["segments"]):
+                        # Find legs covering this segment
+                        total = 0.0
+                        # Advance to the leg starting at seg_from
+                        while leg_idx < len(svc.legs) and svc.legs[leg_idx].from_station != seg_from:
+                            leg_idx += 1
+                        # Sum legs until we reach seg_to
+                        start_idx = leg_idx
+                        while leg_idx < len(svc.legs):
+                            total += svc.legs[leg_idx].run_minutes
+                            if svc.legs[leg_idx].to_station == seg_to:
+                                leg_idx += 1
+                                break
+                            leg_idx += 1
+                        seg_durations[seg_key] = round(total, 1)
+
+                    total_mins = sum(seg_durations.values())
+                    sid = "/".join(str(s) for s in svc.serviceId) if svc.serviceId else "?"
+                    direction = svc.direction.name if svc.direction else "?"
+                    line_label = "Fast" if svc.line == Line.THROUGH else "Slow" if svc.line == Line.LOCAL else "Semi-Fast" if svc.line == Line.SEMI_FAST else "?"
+                    ac_label = "AC" if svc.needsACRake else "NAC"
+                    start_time = _fmt(svc.events[0].atTime) if svc.events[0].atTime is not None else "?"
+
+                    row = {
+                        "serviceId": sid,
+                        "direction": direction,
+                        "lineType": line_label,
+                        "acType": ac_label,
+                        "patternName": pat_name,
+                        "startTime": start_time,
+                    }
+                    for k in pinfo["segment_keys"]:
+                        row[k] = seg_durations.get(k, "")
+                    row["totalMins"] = round(total_mins, 1)
+                    rows.append(row)
+
+        if not rows:
+            return "# No services matched any pattern\n"
+
+        # Build column order: fixed cols + all segment keys that appear in results + totalMins
+        used_seg_keys = []
+        for k in all_seg_keys:
+            if any(k in r for r in rows):
+                used_seg_keys.append(k)
+
+        columns = ["serviceId", "direction", "lineType", "acType", "patternName", "startTime"] + used_seg_keys + ["totalMins"]
+        df = pd.DataFrame(rows, columns=columns)
+
+        # Rename segment columns to their labels
+        rename = {k: seg_labels.get(k, k) for k in used_seg_keys}
+        df = df.rename(columns=rename)
+
+        # Build summary: group matched patterns by service
+        svc_patterns = defaultdict(list)
+        for r in rows:
+            svc_patterns[r["serviceId"]].append(r["patternName"])
+
+        unique_services = len(svc_patterns)
+        header = (
+            f"# Pattern Segment Durations\n"
+            f"# Unique services: {unique_services}\n"
+            f"# Total matches (service x pattern): {len(rows)}\n"
+        )
+        summary_lines = []
+        for sid, pats in svc_patterns.items():
+            summary_lines.append(f"# Service {sid}: {len(pats)} patterns,\"{', '.join(pats)}\"")
+        summary = "\n".join(summary_lines) + "\n"
+
+        return header + summary + df.to_csv(index=False)

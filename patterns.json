@@ -1,0 +1,1230 @@
+{
+    "fast_segments": {
+        "A": "Andheri-Bandra",
+        "B": "Andheri-Borivali",
+        "C": "Bandra-Andheri",
+        "D": "Bandra-Dadar",
+        "E": "Bhayandar-Borivali",
+        "F": "Bhayandar-Vasai Road",
+        "G": "Borivali-Andheri",
+        "H": "Borivali-Bhayandar",
+        "I": "Churchgate-Mumbai Central",
+        "J": "Dadar-Bandra",
+        "K": "Dadar-Mumbai Central",
+        "L": "Mumbai Central-Churchgate",
+        "M": "Mumbai Central-Dadar",
+        "N": "Nalla Sopara-Vasai Road",
+        "O": "Nalla Sopara-Virar",
+        "P": "Vasai Road-Bhayandar",
+        "Q": "Vasai Road-Nalla Sopara",
+        "R": "Virar-Nalla Sopara"
+    },
+    "slow_segments": {
+        "a": "Andheri-Jogeshwari",
+        "b": "Andheri-Vile Parle",
+        "c": "Bandra-Khar Road",
+        "d": "Bandra-Mahim Junction",
+        "e": "Bhayandar-Mira Road",
+        "f": "Bhayandar-Naigaon",
+        "g": "Borivali-Dahisar",
+        "h": "Borivali-Kandivli",
+        "i": "Charni Road-Grant Road",
+        "j": "Charni Road-Marine Lines",
+        "k": "Churchgate-Marine Lines",
+        "l": "Dadar-Matunga Road",
+        "m": "Dadar-Prabhadevi",
+        "n": "Dahisar-Borivali",
+        "o": "Dahisar-Mira Road",
+        "p": "Goregaon-Malad",
+        "q": "Goregaon-Ram Mandir",
+        "r": "Grant Road-Charni Road",
+        "s": "Grant Road-Mumbai Central",
+        "t": "Jogeshwari-Andheri",
+        "u": "Jogeshwari-Ram Mandir",
+        "v": "Kandivli-Borivali",
+        "w": "Kandivli-Malad",
+        "x": "Khar Road-Bandra",
+        "y": "Khar Road-Santacruz",
+        "z": "Lower Parel-Mahalakshmi",
+        "aa": "Lower Parel-Prabhadevi",
+        "ab": "Mahalakshmi-Lower Parel",
+        "ac": "Mahalakshmi-Mumbai Central",
+        "ad": "Mahim Junction-Bandra",
+        "ae": "Mahim Junction-Matunga Road",
+        "af": "Malad-Goregaon",
+        "ag": "Malad-Kandivli",
+        "ah": "Marine Lines-Charni Road",
+        "ai": "Marine Lines-Churchgate",
+        "aj": "Matunga Road-Dadar",
+        "ak": "Matunga Road-Mahim Junction",
+        "al": "Mira Road-Bhayandar",
+        "am": "Mira Road-Dahisar",
+        "an": "Mumbai Central-Grant Road",
+        "ao": "Mumbai Central-Mahalakshmi",
+        "ap": "Naigaon-Bhayandar",
+        "aq": "Naigaon-Vasai Road",
+        "ar": "Nalla Sopara-Vasai Road",
+        "as": "Nalla Sopara-Virar",
+        "at": "Prabhadevi-Dadar",
+        "au": "Prabhadevi-Lower Parel",
+        "av": "Ram Mandir-Goregaon",
+        "aw": "Ram Mandir-Jogeshwari",
+        "ax": "Santacruz-Khar Road",
+        "ay": "Santacruz-Vile Parle",
+        "az": "Vasai Road-Naigaon",
+        "ba": "Vasai Road-Nalla Sopara",
+        "bb": "Vile Parle-Andheri",
+        "bc": "Vile Parle-Santacruz",
+        "bd": "Virar-Nalla Sopara"
+    },
+    "patterns": {
+        "BVI-BYR-Fast": {
+            "type": 1,
+            "segments": [
+                "H"
+            ]
+        },
+        "BVI-BYR-Slow": {
+            "type": -1,
+            "segments": [
+                "g",
+                "o",
+                "al"
+            ]
+        },
+        "ADH-BYR-Fast": {
+            "type": 2,
+            "segments": [
+                "B",
+                "H"
+            ]
+        },
+        "ADH-BYR-Slow": {
+            "type": -2,
+            "segments": [
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v",
+                "g",
+                "o",
+                "al"
+            ]
+        },
+        "BVI-BSR-Fast": {
+            "type": 3,
+            "segments": [
+                "H",
+                "F"
+            ]
+        },
+        "BVI-BSR-Slow": {
+            "type": -3,
+            "segments": [
+                "g",
+                "o",
+                "al",
+                "f",
+                "aq"
+            ]
+        },
+        "ADH-BSR-Fast": {
+            "type": 4,
+            "segments": [
+                "B",
+                "H",
+                "F"
+            ]
+        },
+        "ADH-BSR-Slow": {
+            "type": -4,
+            "segments": [
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v",
+                "g",
+                "o",
+                "al",
+                "f",
+                "aq"
+            ]
+        },
+        "BSR-ADH-Fast": {
+            "type": 5,
+            "segments": [
+                "P",
+                "E",
+                "G"
+            ]
+        },
+        "BSR-ADH-Slow": {
+            "type": -5,
+            "segments": [
+                "az",
+                "ap",
+                "e",
+                "am",
+                "n",
+                "h",
+                "w",
+                "af",
+                "q",
+                "aw",
+                "t"
+            ]
+        },
+        "BYR-BVI-Slow": {
+            "type": -6,
+            "segments": [
+                "e",
+                "am",
+                "n"
+            ]
+        },
+        "BYR-VR-Fast": {
+            "type": 7,
+            "segments": [
+                "F",
+                "Q",
+                "O"
+            ]
+        },
+        "BYR-VR-Slow": {
+            "type": -7,
+            "segments": [
+                "f",
+                "aq",
+                "ba",
+                "as"
+            ]
+        },
+        "CCG-BA-Fast": {
+            "type": 8,
+            "segments": [
+                "I",
+                "M",
+                "J"
+            ]
+        },
+        "CCG-BA-Slow": {
+            "type": -8,
+            "segments": [
+                "k",
+                "ah",
+                "i",
+                "s",
+                "ao",
+                "ab",
+                "aa",
+                "at",
+                "l",
+                "ak",
+                "ad"
+            ]
+        },
+        "DDR-BVI-Fast": {
+            "type": 9,
+            "segments": [
+                "J",
+                "C",
+                "B"
+            ]
+        },
+        "BVI-VR-Fast": {
+            "type": 10,
+            "segments": [
+                "H",
+                "F",
+                "Q",
+                "O"
+            ]
+        },
+        "BVI-VR-Slow": {
+            "type": -10,
+            "segments": [
+                "g",
+                "o",
+                "al",
+                "f",
+                "aq",
+                "ba",
+                "as"
+            ]
+        },
+        "BYR-DDR-Fast": {
+            "type": 11,
+            "segments": [
+                "E",
+                "G",
+                "A",
+                "D"
+            ]
+        },
+        "CCG-GMN-Fast": {
+            "type": 12,
+            "segments": [
+                "I",
+                "M",
+                "J",
+                "C"
+            ]
+        },
+        "CCG-GMN-Slow": {
+            "type": -12,
+            "segments": [
+                "k",
+                "ah",
+                "i",
+                "s",
+                "ao",
+                "ab",
+                "aa",
+                "at",
+                "l",
+                "ak",
+                "ad",
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av"
+            ]
+        },
+        "CCG-MDD-Fast": {
+            "type": 13,
+            "segments": [
+                "I",
+                "M",
+                "J",
+                "C"
+            ]
+        },
+        "DDR-BYR-Fast": {
+            "type": 14,
+            "segments": [
+                "J",
+                "C",
+                "B",
+                "H"
+            ]
+        },
+        "GMN-CCG-Fast": {
+            "type": 15,
+            "segments": [
+                "A",
+                "D",
+                "K",
+                "L"
+            ]
+        },
+        "GMN-CCG-Slow": {
+            "type": -15,
+            "segments": [
+                "q",
+                "aw",
+                "t",
+                "b",
+                "bc",
+                "ax",
+                "x",
+                "d",
+                "ae",
+                "aj",
+                "m",
+                "au",
+                "z",
+                "ac",
+                "an",
+                "r",
+                "j",
+                "ai"
+            ]
+        },
+        "MDD-CCG-Fast": {
+            "type": 16,
+            "segments": [
+                "A",
+                "D",
+                "K",
+                "L"
+            ]
+        },
+        "VR-BVI-Fast": {
+            "type": 17,
+            "segments": [
+                "R",
+                "N",
+                "P",
+                "E"
+            ]
+        },
+        "VR-BVI-Slow": {
+            "type": -17,
+            "segments": [
+                "bd",
+                "ar",
+                "az",
+                "ap",
+                "e",
+                "am",
+                "n"
+            ]
+        },
+        "ADH-VR-Fast": {
+            "type": 18,
+            "segments": [
+                "B",
+                "H",
+                "F",
+                "Q",
+                "O"
+            ]
+        },
+        "ADH-VR-Slow": {
+            "type": -18,
+            "segments": [
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v",
+                "g",
+                "o",
+                "al",
+                "f",
+                "aq",
+                "ba",
+                "as"
+            ]
+        },
+        "BVI-CCG-Fast": {
+            "type": 19,
+            "segments": [
+                "G",
+                "A",
+                "D",
+                "K",
+                "L"
+            ]
+        },
+        "BVI-CCG-Slow": {
+            "type": -19,
+            "segments": [
+                "h",
+                "w",
+                "af",
+                "q",
+                "aw",
+                "t",
+                "b",
+                "bc",
+                "ax",
+                "x",
+                "d",
+                "ae",
+                "aj",
+                "m",
+                "au",
+                "z",
+                "ac",
+                "an",
+                "r",
+                "j",
+                "ai"
+            ]
+        },
+        "CCG-BVI-Fast": {
+            "type": 20,
+            "segments": [
+                "I",
+                "M",
+                "J",
+                "C",
+                "B"
+            ]
+        },
+        "CCG-BVI-Slow": {
+            "type": -20,
+            "segments": [
+                "k",
+                "ah",
+                "i",
+                "s",
+                "ao",
+                "ab",
+                "aa",
+                "at",
+                "l",
+                "ak",
+                "ad",
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v"
+            ]
+        },
+        "MX-CCG-Slow": {
+            "type": -21,
+            "segments": [
+                "ac",
+                "an",
+                "r",
+                "j",
+                "ai"
+            ]
+        },
+        "VR-ADH-Fast": {
+            "type": 22,
+            "segments": [
+                "R",
+                "N",
+                "P",
+                "E",
+                "G"
+            ]
+        },
+        "VR-ADH-Slow": {
+            "type": -22,
+            "segments": [
+                "bd",
+                "ar",
+                "az",
+                "ap",
+                "e",
+                "am",
+                "n",
+                "h",
+                "w",
+                "af",
+                "q",
+                "aw",
+                "t"
+            ]
+        },
+        "BVI-NSP-Slow": {
+            "type": -23,
+            "segments": [
+                "g",
+                "o",
+                "al",
+                "f",
+                "aq",
+                "ba"
+            ]
+        },
+        "BYR-CCG-Fast": {
+            "type": 24,
+            "segments": [
+                "E",
+                "G",
+                "A",
+                "D",
+                "K",
+                "L"
+            ]
+        },
+        "BYR-CCG-Slow": {
+            "type": -24,
+            "segments": [
+                "e",
+                "am",
+                "n",
+                "h",
+                "w",
+                "af",
+                "q",
+                "aw",
+                "t",
+                "b",
+                "bc",
+                "ax",
+                "x",
+                "d",
+                "ae",
+                "aj",
+                "m",
+                "au",
+                "z",
+                "ac",
+                "an",
+                "r",
+                "j",
+                "ai"
+            ]
+        },
+        "CCG-BYR-Fast": {
+            "type": 25,
+            "segments": [
+                "I",
+                "M",
+                "J",
+                "C",
+                "B",
+                "H"
+            ]
+        },
+        "CCG-BYR-Slow": {
+            "type": -25,
+            "segments": [
+                "k",
+                "ah",
+                "i",
+                "s",
+                "ao",
+                "ab",
+                "aa",
+                "at",
+                "l",
+                "ak",
+                "ad",
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v",
+                "g",
+                "o",
+                "al"
+            ]
+        },
+        "NSP-BVI-Slow": {
+            "type": -26,
+            "segments": [
+                "ar",
+                "az",
+                "ap",
+                "e",
+                "am",
+                "n"
+            ]
+        },
+        "BSR-CCG-Fast": {
+            "type": 27,
+            "segments": [
+                "P",
+                "E",
+                "G",
+                "A",
+                "D",
+                "K",
+                "L"
+            ]
+        },
+        "BSR-CCG-Slow": {
+            "type": -27,
+            "segments": [
+                "az",
+                "ap",
+                "e",
+                "am",
+                "n",
+                "h",
+                "w",
+                "af",
+                "q",
+                "aw",
+                "t",
+                "b",
+                "bc",
+                "ax",
+                "x",
+                "d",
+                "ae",
+                "aj",
+                "m",
+                "au",
+                "z",
+                "ac",
+                "an",
+                "r",
+                "j",
+                "ai"
+            ]
+        },
+        "CCG-BSR-Fast": {
+            "type": 28,
+            "segments": [
+                "I",
+                "M",
+                "J",
+                "C",
+                "B",
+                "H",
+                "F"
+            ]
+        },
+        "CCG-BSR-Slow": {
+            "type": -28,
+            "segments": [
+                "k",
+                "ah",
+                "i",
+                "s",
+                "ao",
+                "ab",
+                "aa",
+                "at",
+                "l",
+                "ak",
+                "ad",
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v",
+                "g",
+                "o",
+                "al",
+                "f",
+                "aq"
+            ]
+        },
+        "DDR-VR-Fast": {
+            "type": 29,
+            "segments": [
+                "J",
+                "C",
+                "B",
+                "H",
+                "F",
+                "Q",
+                "O"
+            ]
+        },
+        "VR-DDR-Fast": {
+            "type": 30,
+            "segments": [
+                "R",
+                "N",
+                "P",
+                "E",
+                "G",
+                "A",
+                "D"
+            ]
+        },
+        "CCG-NSP-Fast": {
+            "type": 31,
+            "segments": [
+                "I",
+                "M",
+                "J",
+                "C",
+                "B",
+                "H",
+                "F",
+                "Q"
+            ]
+        },
+        "CCG-NSP-Slow": {
+            "type": -31,
+            "segments": [
+                "k",
+                "ah",
+                "i",
+                "s",
+                "ao",
+                "ab",
+                "aa",
+                "at",
+                "l",
+                "ak",
+                "ad",
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v",
+                "g",
+                "o",
+                "al",
+                "f",
+                "aq",
+                "ba"
+            ]
+        },
+        "NSP-CCG-Fast": {
+            "type": 32,
+            "segments": [
+                "N",
+                "P",
+                "E",
+                "G",
+                "A",
+                "D",
+                "K",
+                "L"
+            ]
+        },
+        "NSP-CCG-Slow": {
+            "type": -32,
+            "segments": [
+                "ar",
+                "az",
+                "ap",
+                "e",
+                "am",
+                "n",
+                "h",
+                "w",
+                "af",
+                "q",
+                "aw",
+                "t",
+                "b",
+                "bc",
+                "ax",
+                "x",
+                "d",
+                "ae",
+                "aj",
+                "m",
+                "au",
+                "z",
+                "ac",
+                "an",
+                "r",
+                "j",
+                "ai"
+            ]
+        },
+        "BYR-ADH-Slow": {
+            "type": -33,
+            "segments": [
+                "e",
+                "am",
+                "n",
+                "h",
+                "w",
+                "af",
+                "q",
+                "aw",
+                "t"
+            ]
+        },
+        "CCG-VR-Fast": {
+            "type": 34,
+            "segments": [
+                "I",
+                "M",
+                "J",
+                "C",
+                "B",
+                "H",
+                "F",
+                "Q",
+                "O"
+            ]
+        },
+        "CCG-VR-Slow": {
+            "type": -34,
+            "segments": [
+                "k",
+                "ah",
+                "i",
+                "s",
+                "ao",
+                "ab",
+                "aa",
+                "at",
+                "l",
+                "ak",
+                "ad",
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v",
+                "g",
+                "o",
+                "al",
+                "f",
+                "aq",
+                "ba",
+                "as"
+            ]
+        },
+        "VR-CCG-Fast": {
+            "type": 35,
+            "segments": [
+                "R",
+                "N",
+                "P",
+                "E",
+                "G",
+                "A",
+                "D",
+                "K",
+                "L"
+            ]
+        },
+        "VR-CCG-Slow": {
+            "type": -35,
+            "segments": [
+                "bd",
+                "ar",
+                "az",
+                "ap",
+                "e",
+                "am",
+                "n",
+                "h",
+                "w",
+                "af",
+                "q",
+                "aw",
+                "t",
+                "b",
+                "bc",
+                "ax",
+                "x",
+                "d",
+                "ae",
+                "aj",
+                "m",
+                "au",
+                "z",
+                "ac",
+                "an",
+                "r",
+                "j",
+                "ai"
+            ]
+        },
+        "BA-BVI-Slow": {
+            "type": -36,
+            "segments": [
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v"
+            ]
+        },
+        "BA-CCG-Slow": {
+            "type": -37,
+            "segments": [
+                "d",
+                "ae",
+                "aj",
+                "m",
+                "au",
+                "z",
+                "ac",
+                "an",
+                "r",
+                "j",
+                "ai"
+            ]
+        },
+        "ADH-NSP-Slow": {
+            "type": -38,
+            "segments": [
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v",
+                "g",
+                "o",
+                "al",
+                "f",
+                "aq",
+                "ba"
+            ]
+        },
+        "NSP-ADH-Slow": {
+            "type": -39,
+            "segments": [
+                "ar",
+                "az",
+                "ap",
+                "e",
+                "am",
+                "n",
+                "h",
+                "w",
+                "af",
+                "q",
+                "aw",
+                "t"
+            ]
+        },
+        "BA-BYR-Slow": {
+            "type": -40,
+            "segments": [
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v",
+                "g",
+                "o",
+                "al"
+            ]
+        },
+        "MX-GMN-Slow": {
+            "type": -41,
+            "segments": [
+                "ab",
+                "aa",
+                "at",
+                "l",
+                "ak",
+                "ad",
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av"
+            ]
+        },
+        "PBHD-BVI-Slow": {
+            "type": -42,
+            "segments": [
+                "at",
+                "l",
+                "ak",
+                "ad",
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v"
+            ]
+        },
+        "ADH-CCG-Slow": {
+            "type": -43,
+            "segments": [
+                "b",
+                "bc",
+                "ax",
+                "x",
+                "d",
+                "ae",
+                "aj",
+                "m",
+                "au",
+                "z",
+                "ac",
+                "an",
+                "r",
+                "j",
+                "ai"
+            ]
+        },
+        "CCG-ADH-Slow": {
+            "type": -44,
+            "segments": [
+                "k",
+                "ah",
+                "i",
+                "s",
+                "ao",
+                "ab",
+                "aa",
+                "at",
+                "l",
+                "ak",
+                "ad",
+                "c",
+                "y",
+                "ay",
+                "bb"
+            ]
+        },
+        "MX-BVI-Slow": {
+            "type": -45,
+            "segments": [
+                "ab",
+                "aa",
+                "at",
+                "l",
+                "ak",
+                "ad",
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v"
+            ]
+        },
+        "NSP-BA-Slow": {
+            "type": -46,
+            "segments": [
+                "ar",
+                "az",
+                "ap",
+                "e",
+                "am",
+                "n",
+                "h",
+                "w",
+                "af",
+                "q",
+                "aw",
+                "t",
+                "b",
+                "bc",
+                "ax",
+                "x"
+            ]
+        },
+        "BA-VR-Slow": {
+            "type": -47,
+            "segments": [
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v",
+                "g",
+                "o",
+                "al",
+                "f",
+                "aq",
+                "ba",
+                "as"
+            ]
+        },
+        "VR-BA-Slow": {
+            "type": -48,
+            "segments": [
+                "bd",
+                "ar",
+                "az",
+                "ap",
+                "e",
+                "am",
+                "n",
+                "h",
+                "w",
+                "af",
+                "q",
+                "aw",
+                "t",
+                "b",
+                "bc",
+                "ax",
+                "x"
+            ]
+        },
+        "PL-VR-Slow": {
+            "type": -49,
+            "segments": [
+                "aa",
+                "at",
+                "l",
+                "ak",
+                "ad",
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v",
+                "g",
+                "o",
+                "al",
+                "f",
+                "aq",
+                "ba",
+                "as"
+            ]
+        },
+        "MX-VR-Slow": {
+            "type": -50,
+            "segments": [
+                "ab",
+                "aa",
+                "at",
+                "l",
+                "ak",
+                "ad",
+                "c",
+                "y",
+                "ay",
+                "bb",
+                "a",
+                "u",
+                "av",
+                "p",
+                "ag",
+                "v",
+                "g",
+                "o",
+                "al",
+                "f",
+                "aq",
+                "ba",
+                "as"
+            ]
+        }
+    }
+}
