@@ -250,6 +250,7 @@ class Simulator:
                 Output("start-station_service", "options"),
                 Output("end-station_service", "options"),
                 Output("intermediate-stations_service", "options"),
+                Output("upload-status", "children"),
             ],
             Input("upload-wtt-inline", "contents"),
         )
@@ -257,7 +258,7 @@ class Simulator:
             if not self.gardi.is_valid_xlsx(self.gardi.wttFileName):
                 raise PreventUpdate
             if not wttContents:
-                return None, [], [], [], [], [], []
+                return None, [], [], [], [], [], [], ""
 
             wttDecoded = base64.b64decode(wttContents.split(",")[1])
             wttIO = io.BytesIO(wttDecoded)
@@ -271,16 +272,27 @@ class Simulator:
                     {"initialized": False, "error": str(e)},
                     [], [], [],
                     [], [], [],
+                    html.Span(f"⚠ Error parsing WTT: {e}", style={"color": "#dc2626"}),
                 )
+
+            n_stations = len(options)
+            n_ignored = getattr(self.gardi.parser, 'ignored_rows', 0)
+            ignored_text = f" ({n_ignored} blank rows skipped)" if n_ignored else ""
+            status = html.Span(
+                f"✓ {n_stations} stations found{ignored_text}",
+                style={"color": "#188038"},
+            )
 
             return (
                 {"initialized": True, "ts": datetime.now().isoformat()},
                 options, options, options,
                 options, options, options,
+                status,
             )
 
         @self.app.callback(
             Output("backend-ready", "data"),
+            Output("upload-status", "children", allow_duplicate=True),
             [
                 Input("app-state", "data"),
                 Input("upload-summary-inline", "contents"),
@@ -291,7 +303,7 @@ class Simulator:
             if not app_state or not app_state.get("initialized"):
                 raise PreventUpdate
             if summaryContents is None:
-                return False
+                return False, dash.no_update
 
             if not self.gardi.is_valid_xlsx(self.gardi.summaryFileName):
                 raise PreventUpdate
@@ -300,11 +312,23 @@ class Simulator:
                 summaryDecoded = base64.b64decode(summaryContents.split(",")[1])
                 summaryIO = io.BytesIO(summaryDecoded)
                 self.gardi.initialize_backend(summaryIO)
-                return True
+
+                wtt = self.gardi.parser.wtt
+                n_stations = len(wtt.stations)
+                n_services = len(wtt.upServices) + len(wtt.downServices)
+                n_rakes = len(wtt.rakecycles)
+
+                status = html.Div([
+                    html.Span(f"✓ {n_stations} stations · ", style={"color": "#188038"}),
+                    html.Span(f"{n_services} services · ", style={"color": "#188038"}),
+                    html.Span(f"{n_rakes} rake links found", style={"color": "#188038"}),
+                ])
+
+                return True, status
             except Exception as e:
                 print(f"Error initializing backend: {e}")
                 self.gardi.parser = None
-                return False
+                return False, html.Span(f"⚠ Error: {e}", style={"color": "#dc2626"})
 
     def _init_filter_query_callbacks(self):
 
@@ -927,6 +951,55 @@ class Simulator:
 
             report_xlsx = self.gardi.export_xlsx()
             return dcc.send_data_frame(report_xlsx.to_excel, filename_xlsx, index=False)
+
+        @self.app.callback(
+            Output("download-template-wtt", "data"),
+            Output("download-template-summary", "data"),
+            Input("download-template-link", "n_clicks"),
+            prevent_initial_call=True,
+        )
+        def download_templates(n_clicks):
+            if not n_clicks:
+                raise PreventUpdate
+
+            import pandas as pd
+            from gardi.core.models import DISTANCE_MAP
+
+            stations_ordered = sorted(DISTANCE_MAP.keys(), key=lambda s: DISTANCE_MAP[s])
+
+            # --- WTT template: two sheets (UP, DOWN) ---
+            # Rows = station × (A/D), Columns = example services
+            wtt_rows = []
+            for st in reversed(stations_ordered):          # UP direction: Virar → Churchgate
+                wtt_rows.append({"STATIONS": st, "A/D": "A", "90101": "HH:MM:SS", "90102": "", "…": ""})
+                wtt_rows.append({"STATIONS": "",  "A/D": "D", "90101": "HH:MM:SS", "90102": "", "…": ""})
+
+            wtt_up = pd.DataFrame(wtt_rows)
+            wtt_down = wtt_up.copy()                       # same shape for DOWN
+
+            wtt_buf = io.BytesIO()
+            with pd.ExcelWriter(wtt_buf, engine="openpyxl") as w:
+                wtt_up.to_excel(w, sheet_name="UP", index=False)
+                wtt_down.to_excel(w, sheet_name="DOWN", index=False)
+            wtt_buf.seek(0)
+
+            # --- Summary template ---
+            summ_rows = [
+                {"Link": "A",  "Service 1": 90101, "Service 2": 90201, "Service 3": "", "…": ""},
+                {"Link": "",   "Notes":     "FAST", "":         "SLOW", "":          "", "…": ""},
+                {"Link": "B",  "Service 1": 90102, "Service 2": 90202, "Service 3": "", "…": ""},
+                {"Link": "",   "Notes":     "SLOW", "":         "FAST", "":          "", "…": ""},
+            ]
+            summ_df = pd.DataFrame(summ_rows)
+
+            summ_buf = io.BytesIO()
+            summ_df.to_excel(summ_buf, index=False, engine="openpyxl")
+            summ_buf.seek(0)
+
+            return (
+                dcc.send_bytes(wtt_buf.getvalue(), "WTT_Template.xlsx"),
+                dcc.send_bytes(summ_buf.getvalue(), "WTT_Link_Summary_Template.xlsx"),
+            )
 
     def run(self, host, port):
         self.app.run(debug=self.debug, host=host, port=port)

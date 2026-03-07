@@ -5,6 +5,12 @@ from gardi.core.filters import FilterType
 from gardi.core.models import DISTANCE_MAP
 from gardi.core import utils
 
+# Color constants: AC = blue, Non-AC = red
+AC_COLOR_08 = "rgba(66,133,244,0.8)"
+AC_COLOR_10 = "rgba(66,133,244,1.0)"
+NONAC_COLOR_08 = "rgba(220,50,50,0.8)"
+NONAC_COLOR_10 = "rgba(220,50,50,1.0)"
+
 
 class GraphBuilder:
     def build_figure(self, wtt, query, distance_map=None):
@@ -26,11 +32,21 @@ class GraphBuilder:
         is_service_filter = query.type == FilterType.SERVICE
 
         if is_service_filter:
-            # 2 traces: AC and non-AC
+            from gardi.core.models import Line as _Line
+
+            # 6 batches: (is_ac, line_style) combos
+            _empty = lambda: {"x": [], "y": [], "z": [], "hover": [], "custom": []}
             batches = {
-                True:  {"x": [], "y": [], "z": [], "hover": [], "custom": []},
-                False: {"x": [], "y": [], "z": [], "hover": [], "custom": []},
+                (True, "solid"):   _empty(),   # AC + Fast
+                (True, "dash"):    _empty(),   # AC + Slow
+                (True, "dashdot"): _empty(),   # AC + Semi-Fast
+                (False, "solid"):  _empty(),   # Non-AC + Fast
+                (False, "dash"):   _empty(),   # Non-AC + Slow
+                (False, "dashdot"):_empty(),   # Non-AC + Semi-Fast
             }
+
+            # Switch-point markers (where a service changes from fast↔slow)
+            switch_pts = {"x": [], "y": [], "z": [], "hover": []}
 
             for rc in rakecycles:
                 for svc in rc.servicePath:
@@ -43,8 +59,24 @@ class GraphBuilder:
                         if svc.serviceId
                         else "?"
                     )
-                    batch = batches[svc.needsACRake]
+
+                    # Determine line style from service line type
+                    if svc.line == _Line.THROUGH:
+                        dash = "solid"
+                    elif svc.line == _Line.LOCAL:
+                        dash = "dash"
+                    else:
+                        dash = "dashdot"
+
+                    batch = batches[(svc.needsACRake, dash)]
                     has_points = False
+
+                    # Collect switch station names for this service
+                    switch_stations = set()
+                    if svc.lineSwitches and len(svc.lineSwitches) > 1:
+                        for idx_sw in range(1, len(svc.lineSwitches)):
+                            if svc.lineSwitches[idx_sw][1] != svc.lineSwitches[idx_sw - 1][1]:
+                                switch_stations.add(svc.lineSwitches[idx_sw][0].strip().upper())
 
                     for ev in svc.events:
                         stName = str(ev.atStation).strip().upper()
@@ -59,6 +91,15 @@ class GraphBuilder:
                         batch["custom"].append(svc_id_str)
                         has_points = True
 
+                        # Record switch points
+                        if stName in switch_stations:
+                            switch_pts["x"].append(ev.atTime)
+                            switch_pts["y"].append(stationToY[stName])
+                            switch_pts["z"].append(z_offset)
+                            switch_pts["hover"].append(
+                                f"⚡ LINE SWITCH — {rc.linkName}-{svc_id_str}: {stName}"
+                            )
+
                     # break line between services
                     if has_points:
                         batch["x"].append(None)
@@ -70,21 +111,38 @@ class GraphBuilder:
                     z_labels.append((z_offset, f"{rc.linkName}-{svc_id_str}"))
                     z_offset += 40
 
-            for is_ac, b in batches.items():
+            _DASH_LABELS = {"solid": "Fast", "dash": "Slow", "dashdot": "Semi-Fast"}
+            for (is_ac, dash), b in batches.items():
                 if not any(v is not None for v in b["x"]):
                     continue
-                color = "rgba(66,133,244,0.8)" if is_ac else "rgba(90,90,90,0.8)"
+                color = AC_COLOR_08 if is_ac else NONAC_COLOR_08
+                ac_label = "AC" if is_ac else "Non-AC"
+                dash_label = _DASH_LABELS.get(dash, dash)
                 all_traces.append(go.Scatter3d(
                     x=b["x"], y=b["y"], z=b["z"],
                     mode="lines+markers",
-                    line=dict(color=color),
+                    line=dict(color=color, dash=dash),
                     marker=dict(size=2, color=color),
                     hovertext=b["hover"],
                     hoverinfo="text",
                     customdata=b["custom"],
-                    name="AC Services" if is_ac else "Non-AC Services",
+                    name=f"{ac_label} {dash_label}",
                     meta={"ac": is_ac},
                     visible=True,
+                ))
+
+            # Add switch-point overlay trace (thick red dots)
+            if switch_pts["x"]:
+                all_traces.append(go.Scatter3d(
+                    x=switch_pts["x"],
+                    y=switch_pts["y"],
+                    z=switch_pts["z"],
+                    mode="markers",
+                    marker=dict(size=6, color="rgba(220,50,50,0.95)", symbol="circle"),
+                    hovertext=switch_pts["hover"],
+                    hoverinfo="text",
+                    name="Line Switch",
+                    showlegend=True,
                 ))
 
         else:
@@ -123,9 +181,7 @@ class GraphBuilder:
 
                 # rakelink trace
                 if x:
-                    color = (
-                        "rgba(66,133,244,0.8)" if rc.rake.isAC else "rgba(90,90,90,0.8)"
-                    )
+                    color = AC_COLOR_08 if rc.rake.isAC else NONAC_COLOR_08
 
                     all_traces.append(
                         go.Scatter3d(
@@ -275,7 +331,7 @@ class GraphBuilder:
             cd = trace.customdata
             if cd is not None and len(cd) > 0:
                 is_ac = isinstance(trace.meta, dict) and trace.meta.get("ac", False)
-                r, g, b = (66, 133, 244) if is_ac else (90, 90, 90)
+                r, g, b = (66, 133, 244) if is_ac else (220, 50, 50)
 
                 if not selected_set:
                     # Reset to original appearance
@@ -353,7 +409,7 @@ class GraphBuilder:
             if is_ac:
                 r, g, b = 66, 133, 244
             else:
-                r, g, b = 90, 90, 90
+                r, g, b = 220, 50, 50
 
             x_vals = trace.x if trace.x is not None else []
             for i, h in enumerate(hover):
@@ -533,7 +589,7 @@ class GraphBuilder:
             if is_ac:
                 r, g, b = 66, 133, 244
             else:
-                r, g, b = 90, 90, 90
+                r, g, b = 220, 50, 50
 
             color = f"rgba({r},{g},{b},0.8)"
             trace.marker.size = 2

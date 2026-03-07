@@ -234,20 +234,38 @@ class GardiUI:
     def drawUploadFiles(self):
         return html.Div(
             [
-                #html.Div(
-                #     [
-                #         dcc.Markdown(
-                #             "##### Upload Required Files", className="subtitle"
-                #         ),
-                #     ],
-                #     style={"padding": "8px 0px"},
-                # ),
                 dbc.Row(
                     [
                         self.drawUploadFullWTT(),
                         self.drawUploadWTTSummary(),
                     ],
-                    style={"padding": "0px 35px", "marginBottom": "20px"},
+                    style={"padding": "0px 35px", "marginBottom": "8px"},
+                ),
+                html.Div(
+                    [
+                        html.Div(id="upload-status", style={"display": "inline"}),
+                        html.Span(" · ", id="template-separator", style={"display": "none"}),
+                        html.A(
+                            "⬇ Download template files",
+                            id="download-template-link",
+                            href="#",
+                            n_clicks=0,
+                            style={
+                                "fontSize": "12px",
+                                "color": "#6366f1",
+                                "textDecoration": "underline",
+                                "cursor": "pointer",
+                            },
+                        ),
+                        dcc.Download(id="download-template-wtt"),
+                        dcc.Download(id="download-template-summary"),
+                    ],
+                    style={
+                        "padding": "0px 35px",
+                        "marginBottom": "12px",
+                        "fontSize": "12px",
+                        "color": "#475569",
+                    },
                 ),
             ]
         )

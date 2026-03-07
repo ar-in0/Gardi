@@ -263,11 +263,14 @@ class TimeTableParser:
         sheet = self.upSheet # a dataframe
         self.stationCol = sheet.iloc[:, 0]
 
+        self.ignored_rows = 0
         for idx, rawVal in enumerate(self.stationCol[1:-8]): # to skip the linkage line + nans
             if pd.isna(rawVal):
+                self.ignored_rows += 1
                 continue
             stName = str(rawVal).strip()
             if not stName:
+                self.ignored_rows += 1
                 continue
 
             st = Station(idx, stName.upper())
