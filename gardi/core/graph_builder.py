@@ -10,6 +10,9 @@ class GraphBuilder:
         if distance_map is None:
             distance_map = DISTANCE_MAP
 
+        pinned_links = set(query.pinnedLinks) if query.pinnedLinks else set()
+        pinned_services = set(query.pinnedServices) if query.pinnedServices else set()
+
         rakecycles = [rc for rc in wtt.rakecycles if rc.servicePath]
         print(f"We have  len {len(rakecycles)}")
         if not rakecycles:
@@ -33,15 +36,15 @@ class GraphBuilder:
 
             for rc in rakecycles:
                 for svc in rc.servicePath:
-                    if not svc.render:
-                        z_offset += 40
-                        continue
-
                     svc_id_str = (
                         ",".join(str(sid) for sid in svc.serviceId)
                         if svc.serviceId
                         else "?"
                     )
+                    if not svc.render and svc_id_str not in pinned_services:
+                        z_offset += 40
+                        continue
+
                     batch = batches[svc.needsACRake]
                     has_points = False
 
@@ -90,7 +93,7 @@ class GraphBuilder:
 
         else:
             for rc in rakecycles:
-                if not rc.render:
+                if not rc.render and rc.linkName not in pinned_links:
                     continue
 
                 if query.type == FilterType.STATION:
@@ -99,11 +102,16 @@ class GraphBuilder:
                     mode = "lines+markers"
 
                 # enumerate rakelink events
-                x, y, z, stationLabels = [], [], [], []
+                x, y, z, stationLabels, svcIds = [], [], [], [], []
 
                 for svc in rc.servicePath:
                     if not svc.render:
                         continue
+                    svc_id_str = (
+                        ",".join(str(sid) for sid in svc.serviceId)
+                        if svc.serviceId
+                        else "?"
+                    )
                     for ev in svc.events:
                         if not ev.atTime or not ev.atStation:
                             continue
@@ -121,6 +129,7 @@ class GraphBuilder:
                         y.append(stationToY[stName])
                         z.append(z_offset)
                         stationLabels.append(stName)
+                        svcIds.append(svc_id_str)
 
                 # rakelink trace
                 if x:
@@ -137,8 +146,8 @@ class GraphBuilder:
                             line=dict(color=color),
                             marker=dict(size=2, color=color),
                             hovertext=[
-                                f"{rc.linkName}: {st} @ {(int(xx)//60) % 24:02d}:{int(xx%60):02d}"
-                                for xx, st in zip(x, stationLabels)
+                                f"{rc.linkName}-{sid}: {st} @ {(int(xx)//60) % 24:02d}:{int(xx%60):02d}"
+                                for xx, st, sid in zip(x, stationLabels, svcIds)
                             ],
                             hoverinfo="text",
                             name=rc.linkName,
@@ -272,6 +281,7 @@ class GraphBuilder:
                     trace.marker.size = 2
                     trace.marker.opacity = 1
                     trace.line.color = base_color
+                    trace.hoverinfo = "text"
                 else:
                     # Dim the entire original trace
                     dim_color = f"rgba({r},{g},{b},0.05)"
@@ -279,6 +289,7 @@ class GraphBuilder:
                     trace.marker.size = 1
                     trace.marker.opacity = 1
                     trace.line.color = dim_color
+                    trace.hoverinfo = "skip"
 
                     # Build overlay traces for selected services
                     bright_color = f"rgba({r},{g},{b},1.0)"
@@ -315,6 +326,7 @@ class GraphBuilder:
                         ))
             else:
                 trace.opacity = 0.15 if selected_set else 1
+                trace.hoverinfo = "skip" if selected_set else "text"
 
     def highlight_stations(self, fig, station_names):
         """Highlight events at selected stations, dim everything else.
@@ -401,14 +413,17 @@ class GraphBuilder:
             if not selected_set:
                 # Reset to original appearance
                 trace.opacity = 1.0
+                trace.hoverinfo = "text"
                 if hasattr(trace, "marker"):
                     trace.marker.size = 2
             elif trace_link in selected_set:
                 trace.opacity = 1.0
+                trace.hoverinfo = "text"
                 if hasattr(trace, "marker"):
                     trace.marker.size = 3
             else:
                 trace.opacity = 0.05
+                trace.hoverinfo = "skip"
                 if hasattr(trace, "marker"):
                     trace.marker.size = 1
 

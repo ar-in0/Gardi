@@ -27,6 +27,8 @@ class FilterQuery:
     inDirection: Optional[List[str]] = None
     selectedLinks: List[str] = field(default_factory=list)
     selectedServices: List[str] = field(default_factory=list)
+    pinnedLinks: List[str] = field(default_factory=list)
+    pinnedServices: List[str] = field(default_factory=list)
 
 
 class FilterEngine:

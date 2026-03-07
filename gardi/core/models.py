@@ -511,7 +511,21 @@ class Service:
 
         stName = None
         serviceCol = self.rawServiceCol
+        ex_station_override = None
         for rowIdx, cell in serviceCol.items():
+            cell_upper = str(cell).strip().upper()
+            if cell_upper == 'EX':
+                ex_station_override = 'pending'
+                continue
+            if ex_station_override == 'pending':
+                abbr = cell_upper.split()[0]
+                if abbr in parser.stationMap:
+                    ex_station_override = parser.stationMap[abbr].name.strip().upper()
+                elif abbr in parser.stations:
+                    ex_station_override = abbr
+                else:
+                    ex_station_override = None
+                continue
             match = parser.rTimePattern.search(str(cell))
             if match:
                 tCell = match.group(0)
@@ -521,6 +535,10 @@ class Service:
                     if pd.isna(stName) or not str(stName).strip():
                         stName = sheet.iat[rowIdx - 2, 0]
                 stName = normalize_station_name(stName)
+                if ex_station_override and ex_station_override != 'pending':
+                    if ex_station_override in parser.stations:
+                        stName = ex_station_override
+                    ex_station_override = None
                 if str(stName).strip() in parser.stations.keys():
                     station = parser.stations[str(stName).strip()]
                 elif "REVERSED" in str(stName).upper():

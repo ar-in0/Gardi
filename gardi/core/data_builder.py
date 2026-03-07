@@ -70,59 +70,78 @@ def make_summary_card(title, items, footer=None):
 
 
 class DataBuilder:
-    def build_service_table_data(self, wtt):
-        rows = []
+    def _build_service_row(self, svc):
+        svc_id_str = ",".join(str(sid) for sid in svc.serviceId)
+        svc_events = [e for e in svc.events if not e.isTerminalDeparture]
+        start_time = fmt_time(svc_events[0].atTime) if svc_events else "--:--"
+        end_time = fmt_time(svc_events[-1].atTime) if svc_events else "--:--"
+        duration_min = int(svc_events[-1].atTime) - int(svc_events[0].atTime)
+
+        return {
+            "id": svc_id_str,
+            "service_id": svc_id_str,
+            "direction": svc.direction.name if svc.direction else "?",
+            "is_ac": "AC" if svc.needsACRake else "Non-AC",
+            "line": svc.line.name if svc.line else "?",
+            "start_station": (
+                svc.initStation.name if svc.initStation else "?"
+            ),
+            "start_time": start_time,
+            "duration": duration_min,
+            "end_time": end_time,
+            "end_station": (
+                svc.finalStation.name if svc.finalStation else "?"
+            ),
+        }
+
+    def build_service_table_data(self, wtt, pinned_services=None):
+        pinned_set = set(pinned_services) if pinned_services else set()
+        pinned_rows = []
+        filtered_rows = []
+
         for svc in wtt.suburbanServices:
-            if not svc.render or not svc.events:
+            if not svc.events:
                 continue
-
             svc_id_str = ",".join(str(sid) for sid in svc.serviceId)
-            svc_events = [e for e in svc.events if not e.isTerminalDeparture]
-            start_time = fmt_time(svc_events[0].atTime) if svc_events else "--:--"
-            end_time = fmt_time(svc_events[-1].atTime) if svc_events else "--:--"
-            duration_min = int(svc_events[-1].atTime) - int(svc_events[0].atTime)
 
-            rows.append(
-                {
-                    "id": svc_id_str,
-                    "service_id": svc_id_str,
-                    "direction": svc.direction.name if svc.direction else "?",
-                    "is_ac": "AC" if svc.needsACRake else "Non-AC",
-                    "line": svc.line.name if svc.line else "?",
-                    "start_station": (
-                        svc.initStation.name if svc.initStation else "?"
-                    ),
-                    "start_time": start_time,
-                    "duration": duration_min,
-                    "end_time": end_time,
-                    "end_station": (
-                        svc.finalStation.name if svc.finalStation else "?"
-                    ),
-                }
-            )
+            if svc_id_str in pinned_set:
+                pinned_rows.append(self._build_service_row(svc))
+            elif svc.render:
+                filtered_rows.append(self._build_service_row(svc))
 
-        return rows
+        rows = pinned_rows + filtered_rows
+        pinned_indices = list(range(len(pinned_rows)))
+        return rows, pinned_indices
 
-    def build_rake_table_data(self, wtt):
-        rows = []
+    def _build_rake_row(self, rc):
+        return {
+            "id": rc.linkName,
+            "linkname": rc.linkName,
+            "cars": rc.rake.rakeSize,
+            "is_ac": "AC" if rc.rake.isAC else "Non-AC",
+            "length_km": int(rc.lengthKm),
+            "start": rc.servicePath[0].initStation.name,
+            "end": rc.servicePath[-1].finalStation.name,
+            "duration": f"{int(rc.durationMinutes) // 60:02d}:{int(rc.durationMinutes) % 60:02d}",
+        }
+
+    def build_rake_table_data(self, wtt, pinned_links=None):
+        pinned_set = set(pinned_links) if pinned_links else set()
+        pinned_rows = []
+        filtered_rows = []
+
         for rc in wtt.rakecycles:
-            if not rc.render or rc.rake is None:
+            if rc.rake is None:
                 continue
 
-            rows.append(
-                {
-                    "id": rc.linkName,
-                    "linkname": rc.linkName,
-                    "cars": rc.rake.rakeSize,
-                    "is_ac": "AC" if rc.rake.isAC else "Non-AC",
-                    "length_km": int(rc.lengthKm),
-                    "start": rc.servicePath[0].initStation.name,
-                    "end": rc.servicePath[-1].finalStation.name,
-                    "duration": f"{int(rc.durationMinutes) // 60:02d}:{int(rc.durationMinutes) % 60:02d}",
-                }
-            )
+            if rc.linkName in pinned_set:
+                pinned_rows.append(self._build_rake_row(rc))
+            elif rc.render:
+                filtered_rows.append(self._build_rake_row(rc))
 
-        return rows
+        rows = pinned_rows + filtered_rows
+        pinned_indices = list(range(len(pinned_rows)))
+        return rows, pinned_indices
 
     def export_to_xlsx(self, wtt):
         """

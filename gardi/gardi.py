@@ -64,6 +64,18 @@ class Gardi:
         """generate RC -> reset flags -> apply filters -> build figure -> post-process"""
         qq = self.query
 
+        # Merge current selections into pinned sets (accumulate)
+        if qq.selectedLinks:
+            pinned_set = set(qq.pinnedLinks)
+            pinned_set.update(qq.selectedLinks)
+            qq.pinnedLinks = list(pinned_set)
+            qq.selectedLinks = []
+        if qq.selectedServices:
+            pinned_set = set(qq.pinnedServices)
+            pinned_set.update(qq.selectedServices)
+            qq.pinnedServices = list(pinned_set)
+            qq.selectedServices = []
+
         # First-time backend build
         if not self.linkTimingsCreated:
             self.parser.wtt.generateRakeCycles(self.parser)
@@ -82,10 +94,6 @@ class Gardi:
         # Station mode post-processing
         fig = self.graph_builder.post_process_station_mode(fig, qq, self.parser.wtt, self.parser)
 
-        # Re-apply highlighting if there were selections
-        if qq.selectedLinks:
-            self.graph_builder.highlight_links(fig, qq.selectedLinks)
-
         return fig
 
     def convert_to_ac(self, link_names):
@@ -93,10 +101,14 @@ class Gardi:
         return result
 
     def build_service_table(self):
-        return self.data_builder.build_service_table_data(self.parser.wtt)
+        return self.data_builder.build_service_table_data(
+            self.parser.wtt, pinned_services=self.query.pinnedServices
+        )
 
     def build_rake_table(self):
-        return self.data_builder.build_rake_table_data(self.parser.wtt)
+        return self.data_builder.build_rake_table_data(
+            self.parser.wtt, pinned_links=self.query.pinnedLinks
+        )
 
     def build_station_gap_summary(self):
         return self.data_builder.build_station_gap_summary(self.parser, self.query)

@@ -561,7 +561,24 @@ class GardiUI:
                     n_clicks=0,
                     className="generate-button",
                     disabled=True,
-                )
+                ),
+                html.Button(
+                    "Clear Selections",
+                    id="clear-selections-button",
+                    n_clicks=0,
+                    style={
+                        "display": "none",
+                        "marginTop": "8px",
+                        "width": "100%",
+                        "height": "32px",
+                        "border": "1px solid #e2e8f0",
+                        "borderRadius": "6px",
+                        "fontSize": "12px",
+                        "color": "#64748b",
+                        "backgroundColor": "white",
+                        "cursor": "pointer",
+                    },
+                ),
             ],
             style={"padding": "0px 35px"},
         )

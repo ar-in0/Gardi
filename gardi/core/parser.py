@@ -126,6 +126,8 @@ class TimeTableParser:
         for s in excluded:
             if not s.serviceId:
                 buckets['no service ID'].append(s)
+            elif s.zone == ServiceZone.CENTRAL:
+                buckets['Central Railway (C.RLY)'].append(s)
             elif s.needsACRake:
                 buckets['AC, not in any link'].append(s)
             elif s.zone == ServiceZone.SUBURBAN:
