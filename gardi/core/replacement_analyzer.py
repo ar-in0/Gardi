@@ -135,7 +135,7 @@ class ReplacementAnalyzer:
             sid = str(svc.serviceId[0]) if svc.serviceId else "?"
             rakelink = self.svc_to_link.get(sid, "?")
 
-            originally_ac = svc.needsACRake
+            originally_ac = svc.needsACRake and (rakelink not in replacement_set)
             is_ac = originally_ac or (rakelink in replacement_set)
             seen_stations = set()
             for evt in svc.events:

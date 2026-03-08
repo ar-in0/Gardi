@@ -965,6 +965,8 @@ class Simulator:
                 self.gardi.query.ac = ac_status
 
                 fig = self.gardi.generate_visualization()
+                if self.gardi.converted_links:
+                    self.gardi.highlight_links(fig, self.gardi.converted_links)
 
                 has_pinned = bool(self.gardi.query.pinnedLinks or self.gardi.query.pinnedServices)
                 btn_style = clear_btn_shown if has_pinned else clear_btn_hidden

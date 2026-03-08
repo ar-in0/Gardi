@@ -85,9 +85,9 @@ class Gardi:
             self.parser.wtt.generateRakeCycles(self.parser)
             self.parser.wtt.storeOriginalACStates()
             self.linkTimingsCreated = True
-        elif not skip_ac_reset:
-            self.parser.wtt.resetACStates()
-            self.converted_links = []
+        # elif not skip_ac_reset:
+        #     self.parser.wtt.resetACStates()
+        #     self.converted_links = []
 
         # Reset + filter
         self.filter_engine.reset_all_flags(self.parser.wtt)
@@ -298,14 +298,16 @@ class Gardi:
             style={"padding": "8px"},
         )
 
-        # If AC conversions exist, show side-by-side layout + analysis below
+        # If AC conversions exist, show summary cards next to rakelink details,
+        # then all analysis graphs at full width below
         if self.converted_links:
-            ac_panel = self.buildACAnalysisPanel()
+            summary_cards, analysis_graphs = self._buildACAnalysisSplit()
             return html.Div([
                 dbc.Row([
                     dbc.Col(rakelink_details, md=6),
-                    dbc.Col(ac_panel, md=6),
-                ], className="g-2"),
+                    dbc.Col(summary_cards, md=6),
+                ], className="g-2 mb-3"),
+                html.Div(analysis_graphs, style={"width": "100%"}),
             ])
 
         return rakelink_details
@@ -350,13 +352,32 @@ class Gardi:
             ]
         )
 
+    def _buildACAnalysisSplit(self):
+        """Return (summary_cards_div, analysis_graphs_div) separately.
+
+        summary_cards_div: the before/after metric cards (fits in a col).
+        analysis_graphs_div: density heatmap + headway gaps + followings at full width.
+        """
+        summary_children, graph_children = self._buildACAnalysisChildren()
+        return (
+            html.Div(summary_children, style={"padding": "8px"}),
+            html.Div(graph_children, style={"padding": "8px"}),
+        )
+
     def buildACAnalysisPanel(self):
-        """Build inline AC analysis visualizations from cached report."""
+        """Build inline AC analysis visualizations from cached report (full panel)."""
+        summary_children, graph_children = self._buildACAnalysisChildren()
+        children = summary_children + graph_children
+        return html.Div(children, style={"padding": "8px"}) if children else html.Div()
+
+    def _buildACAnalysisChildren(self):
+        """Return (summary_card_children, graph_children) lists."""
         import plotly.graph_objs as go
         from plotly.subplots import make_subplots
 
         report = self._get_replacement_report()
-        children = []
+        summary_children = []
+        graph_children = []
 
         # 1. Before/After summary cards
         if report.beforeAfterMetrics:
@@ -372,7 +393,7 @@ class Gardi:
                 f"AC coverage: {a['ac_pct']}%",
                 f"Peak AC stops: {sum(a.get('peak_ac_frequency', {}).values())}",
             ], footer=f"+{d['ac_services']} services (+{d['ac_pct']}%)")
-            children.append(
+            summary_children.append(
                 dbc.Row([
                     dbc.Col(before_card, width=6),
                     dbc.Col(after_card, width=6),
@@ -405,7 +426,7 @@ class Gardi:
                 paper_bgcolor="white", plot_bgcolor="white",
                 font=dict(size=11),
             )
-            children.append(html.Div([
+            graph_children.append(html.Div([
                 html.Div("AC Service Density by Hour", style={
                     "fontSize": "13px", "fontWeight": "600", "color": "#475569", "marginBottom": "4px",
                 }),
@@ -417,7 +438,6 @@ class Gardi:
         # 3. AC headway gaps bar chart
         if report.headwayGaps:
             gap_stations = [f"{e['station']} ({e['direction']})" for e in report.headwayGaps]
-            default_station = gap_stations[0] if gap_stations else None
 
             # Build a dropdown + chart for the worst-gap station
             options = [{"label": s, "value": i} for i, s in enumerate(gap_stations)]
@@ -438,7 +458,7 @@ class Gardi:
                 font=dict(size=11),
             )
 
-            children.append(html.Div([
+            graph_children.append(html.Div([
                 html.Div("AC Headway Gaps", style={
                     "fontSize": "13px", "fontWeight": "600", "color": "#475569", "marginBottom": "4px",
                 }),
@@ -490,7 +510,7 @@ class Gardi:
                 annotations=annotations,
                 xaxis=dict(tickangle=-45),
             )
-            children.append(html.Div([
+            graph_children.append(html.Div([
                 html.Div("Link Followings (* = AC-AC pair)", style={
                     "fontSize": "13px", "fontWeight": "600", "color": "#475569", "marginBottom": "4px",
                 }),
@@ -499,7 +519,7 @@ class Gardi:
                           style={"width": "100%"}),
             ], className="mb-3"))
 
-        return html.Div(children, style={"padding": "8px"}) if children else html.Div()
+        return summary_children, graph_children
 
     def _build_minimal_rake_block(self, rc):
         rows = []
