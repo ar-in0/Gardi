@@ -5,6 +5,12 @@ from gardi.core.filters import FilterType
 from gardi.core.models import DISTANCE_MAP
 
 
+OFF_NETWORK_Y = {
+    "CHATTRAPATI SHIVAJI MAHARAJ TERMINUS": -5,
+    "PANVEL": -15,
+}
+
+
 class GraphBuilder:
     def build_figure(self, wtt, query, distance_map=None):
         if distance_map is None:
@@ -103,6 +109,9 @@ class GraphBuilder:
 
                 # enumerate rakelink events
                 x, y, z, stationLabels, svcIds = [], [], [], [], []
+                off_network_buffer = []
+                last_on_network = None
+                gaps = []
 
                 for svc in rc.servicePath:
                     if not svc.render:
@@ -123,13 +132,23 @@ class GraphBuilder:
 
                         stName = str(ev.atStation).strip().upper()
                         if stName not in stationToY:
+                            off_network_buffer.append((stName, minutes))
                             continue
+
+                        if off_network_buffer and last_on_network:
+                            # Break the line before this point
+                            for lst in (x, y, z, stationLabels, svcIds):
+                                lst.append(None)
+                            end_point = (minutes, stationToY[stName], z_offset)
+                            gaps.append((last_on_network, end_point, off_network_buffer, svc_id_str))
+                            off_network_buffer = []
 
                         x.append(minutes)
                         y.append(stationToY[stName])
                         z.append(z_offset)
                         stationLabels.append(stName)
                         svcIds.append(svc_id_str)
+                        last_on_network = (x[-1], y[-1], z[-1])
 
                 # rakelink trace
                 if x:
@@ -147,6 +166,7 @@ class GraphBuilder:
                             marker=dict(size=2, color=color),
                             hovertext=[
                                 f"{rc.linkName}-{sid}: {st} @ {(int(xx)//60) % 24:02d}:{int(xx%60):02d}"
+                                if xx is not None else None
                                 for xx, st, sid in zip(x, stationLabels, svcIds)
                             ],
                             hoverinfo="text",
@@ -155,6 +175,42 @@ class GraphBuilder:
                             visible=True,
                         )
                     )
+                    # Add orange dashed connectors for off-network gaps
+                    for start, end, via_stops, sid in gaps:
+                        gap_x = [start[0]]
+                        gap_y = [start[1]]
+                        gap_z = [start[2]]
+                        gap_hover = []
+                        via_names = []
+                        gap_hover.append(f"{rc.linkName}-{sid}: leaving WR network")
+                        for off_name, off_time in via_stops:
+                            via_names.append(off_name)
+                            off_y = OFF_NETWORK_Y.get(off_name, -5)
+                            gap_x.append(off_time)
+                            gap_y.append(off_y)
+                            gap_z.append(start[2])
+                            gap_hover.append(
+                                f"{rc.linkName}-{sid}: {off_name} @ "
+                                f"{(int(off_time)//60) % 24:02d}:{int(off_time)%60:02d}"
+                            )
+                        gap_x.append(end[0])
+                        gap_y.append(end[1])
+                        gap_z.append(end[2])
+                        via_label = ", ".join(sorted(set(via_names)))
+                        gap_hover.append(f"{rc.linkName}-{sid}: back on WR via {via_label}")
+                        all_traces.append(go.Scatter3d(
+                            x=gap_x,
+                            y=gap_y,
+                            z=gap_z,
+                            mode="lines+markers",
+                            line=dict(color="rgba(255,165,0,0.9)", dash="dash", width=4),
+                            marker=dict(size=4, color="rgba(255,165,0,0.9)", symbol="diamond"),
+                            hovertext=gap_hover,
+                            hoverinfo="text",
+                            name=rc.linkName,
+                            showlegend=False,
+                        ))
+
                     z_labels.append((z_offset, rc.linkName))
                     z_offset += 40
 
@@ -172,6 +228,10 @@ class GraphBuilder:
 
         yTickVals = list(stationToY.values())
         yTickText = list(stationToY.keys())
+        # Add off-network stations to Y axis
+        for name, yval in OFF_NETWORK_Y.items():
+            yTickVals.append(yval)
+            yTickText.append(name)
 
         fig = go.Figure(data=all_traces)
 
