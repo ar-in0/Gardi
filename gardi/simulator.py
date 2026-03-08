@@ -403,11 +403,11 @@ class Simulator:
         def reset_ac_conversions(n_clicks, current_fig):
             if not n_clicks:
                 raise PreventUpdate
-            status_msg = html.Div(
-                "Reset functionality requires storing original state",
-                style={"padding": "8px", "color": "#f59e0b"},
-            )
-            raise PreventUpdate
+            self.gardi.parser.wtt.resetACStates()
+            self.gardi.converted_links = []
+            rows, pinned_indices = self.gardi.build_rake_table()
+            fig = self.gardi.generate_visualization(skip_ac_reset=True)
+            return fig, rows, ""
 
         @self.app.callback(
             Output("convert-ac-button", "disabled"),
@@ -459,18 +459,10 @@ class Simulator:
             # Regenerate visualization (keep the AC conversion we just applied)
             fig = self.gardi.generate_visualization(skip_ac_reset=True)
 
-            status_msg = html.Div(
-                [
-                    html.Span(f"Converted {result['converted']} rake link(s) to AC: "),
-                    html.Span(", ".join(result["links"]), style={"fontWeight": "500"}),
-                ],
-                style={
-                    "padding": "8px 12px",
-                    "borderLeft": "3px solid #10b981",
-                    "borderRadius": "4px",
-                    "marginBottom": "8px",
-                },
-            )
+            status_msg = html.Div([
+                f"Converted to AC: {', '.join(result['links'])}",
+                dbc.Button("Download Report", id="download-report-btn", size="sm", color="link"),
+            ])
 
             return fig, updated_table, status_msg
 
@@ -496,6 +488,7 @@ class Simulator:
 
         @self.app.callback(
             Output("rake-3d-graph", "figure", allow_duplicate=True),
+            Output("clear-selections-button", "style", allow_duplicate=True),
             Input("service-table", "selected_rows"),
             State("rake-3d-graph", "figure"),
             State("service-table", "data"),
@@ -512,6 +505,20 @@ class Simulator:
             ):
                 raise PreventUpdate
 
+            clear_btn_hidden = {"display": "none"}
+            clear_btn_shown = {
+                "display": "block",
+                "marginTop": "8px",
+                "width": "100%",
+                "height": "32px",
+                "border": "1px solid #e2e8f0",
+                "borderRadius": "6px",
+                "fontSize": "12px",
+                "color": "#64748b",
+                "backgroundColor": "white",
+                "cursor": "pointer",
+            }
+
             if not selected_rows or not table_data:
                 selected_services = []
             else:
@@ -521,12 +528,25 @@ class Simulator:
                     if idx < len(table_data)
                 ]
 
+            selected_set = set(selected_services)
+            pinned = set(self.gardi.query.pinnedServices)
+
+            # Unpin any pinned services that were unchecked
+            self.gardi.query.pinnedServices = [s for s in self.gardi.query.pinnedServices if s in selected_set]
             self.gardi.query.selectedServices = selected_services
 
+            # Smart highlight: only dim if non-pinned rows are selected
+            newly_selected = selected_set - pinned
             fig = go.Figure(current_fig)
-            self.gardi.highlight_services(fig, selected_services)
+            if newly_selected:
+                self.gardi.highlight_services(fig, selected_services)
+            else:
+                self.gardi.highlight_services(fig, [])  # all full opacity
 
-            return fig
+            has_pinned = bool(self.gardi.query.pinnedLinks or self.gardi.query.pinnedServices)
+            btn_style = clear_btn_shown if has_pinned else clear_btn_hidden
+
+            return fig, btn_style
 
         @self.app.callback(
             Output("service-table", "selected_rows"),
@@ -572,6 +592,7 @@ class Simulator:
 
         @self.app.callback(
             Output("rake-3d-graph", "figure", allow_duplicate=True),
+            Output("clear-selections-button", "style", allow_duplicate=True),
             Input("rake-link-table", "selected_rows"),
             State("rake-3d-graph", "figure"),
             State("rake-link-table", "data"),
@@ -580,6 +601,20 @@ class Simulator:
         def update_graph_highlighting(selected_rows, current_fig, table_data):
             if current_fig is None or not current_fig.get("data"):
                 raise PreventUpdate
+
+            clear_btn_hidden = {"display": "none"}
+            clear_btn_shown = {
+                "display": "block",
+                "marginTop": "8px",
+                "width": "100%",
+                "height": "32px",
+                "border": "1px solid #e2e8f0",
+                "borderRadius": "6px",
+                "fontSize": "12px",
+                "color": "#64748b",
+                "backgroundColor": "white",
+                "cursor": "pointer",
+            }
 
             if not selected_rows or not table_data:
                 selected_links = []
@@ -590,16 +625,30 @@ class Simulator:
                     if idx < len(table_data)
                 ]
 
+            selected_set = set(selected_links)
+            pinned = set(self.gardi.query.pinnedLinks)
+
+            # Unpin any pinned links that were unchecked
+            self.gardi.query.pinnedLinks = [l for l in self.gardi.query.pinnedLinks if l in selected_set]
             self.gardi.query.selectedLinks = selected_links
 
+            # Smart highlight: only dim if non-pinned rows are selected
+            newly_selected = selected_set - pinned
             fig = go.Figure(current_fig)
-            self.gardi.highlight_links(fig, selected_links)
+            if newly_selected:
+                self.gardi.highlight_links(fig, selected_links)
+            else:
+                self.gardi.highlight_links(fig, [])  # all full opacity
 
-            return fig
+            has_pinned = bool(self.gardi.query.pinnedLinks or self.gardi.query.pinnedServices)
+            btn_style = clear_btn_shown if has_pinned else clear_btn_hidden
+
+            return fig, btn_style
 
         @self.app.callback(
             Output("service-table", "data"),
             Output("service-count", "children"),
+            Output("service-table", "selected_rows", allow_duplicate=True),
             Input("graph-ready", "data"),
             Input("ac-selector", "value"),
             State("filter-tabs", "active_tab"),
@@ -612,15 +661,16 @@ class Simulator:
             )
 
             if not graph_ready or self.gardi.parser is None or not is_service_mode:
-                return [], ""
+                return [], "", []
 
-            rows = self.gardi.build_service_table()
-            return rows, f"{len(rows)} services"
+            rows, pinned_indices = self.gardi.build_service_table()
+            return rows, f"{len(rows)} services", pinned_indices
 
         @self.app.callback(
             Output("rake-link-table", "data"),
             Output("rl-table-store", "data"),
             Output("rake-link-count", "children"),
+            Output("rake-link-table", "selected_rows", allow_duplicate=True),
             Input("graph-ready", "data"),
             Input("ac-selector", "value"),
             State("upload-wtt-inline", "contents"),
@@ -629,10 +679,10 @@ class Simulator:
         )
         def build_rake_table(graph_ready, ac_select, wttContents, summaryContents):
             if not graph_ready or self.gardi.parser is None:
-                return [], [], ""
+                return [], [], "", []
 
-            rows = self.gardi.build_rake_table()
-            return rows, rows, f"{len(rows)} rake links"
+            rows, pinned_indices = self.gardi.build_rake_table()
+            return rows, rows, f"{len(rows)} rake links", pinned_indices
 
         @self.app.callback(
             Output("station-gap-table", "data"),
@@ -823,26 +873,6 @@ class Simulator:
             return selected
 
         @self.app.callback(
-            Output("app-state", "data", allow_duplicate=True),
-            Input("rake-link-table", "selected_rows"),
-            State("rake-link-table", "data"),
-            prevent_initial_call=True,
-        )
-        def update_selected_rakes(selected_rows, table_data):
-            if not selected_rows or not table_data:
-                self.gardi.query.selectedLinks = []
-                return {"selectedLinks": []}
-
-            selected_links = [
-                table_data[idx]["linkname"]
-                for idx in selected_rows
-                if idx < len(table_data)
-            ]
-
-            self.gardi.query.selectedLinks = selected_links
-            return {"selectedLinks": selected_links}
-
-        @self.app.callback(
             Output("viz-container", "style"),
             Output("right-panel-content", "children"),
             Output("mode-viz", "active"),
@@ -875,8 +905,7 @@ class Simulator:
             Output("rake-3d-graph", "figure"),
             Output("export-button", "disabled"),
             Output("graph-ready", "data"),
-            Output("rake-link-table", "selected_rows", allow_duplicate=True),
-            Output("service-table", "selected_rows", allow_duplicate=True),
+            Output("clear-selections-button", "style"),
             Output("station-gap-table", "selected_rows", allow_duplicate=True),
             Input("generate-button", "n_clicks"),
             Input("rake-3d-graph", "clickData"),
@@ -888,22 +917,37 @@ class Simulator:
         def on_generate_click(
             n_clicks, clickData, ac_status, wttContents, summaryContents
         ):
+            clear_btn_hidden = {"display": "none"}
+            clear_btn_shown = {
+                "display": "block",
+                "marginTop": "8px",
+                "width": "100%",
+                "height": "32px",
+                "border": "1px solid #e2e8f0",
+                "borderRadius": "6px",
+                "fontSize": "12px",
+                "color": "#64748b",
+                "backgroundColor": "white",
+                "cursor": "pointer",
+            }
+
             if n_clicks == 0 or wttContents is None or summaryContents is None:
-                return "", go.Figure(), True, False, [], [], []
+                return "", go.Figure(), True, False, clear_btn_hidden, []
 
             try:
                 self.gardi.query.ac = ac_status
-                self.gardi.query.selectedLinks = []
-                self.gardi.query.selectedServices = []
 
                 fig = self.gardi.generate_visualization()
 
-                return html.Div(), fig, False, True, [], [], []
+                has_pinned = bool(self.gardi.query.pinnedLinks or self.gardi.query.pinnedServices)
+                btn_style = clear_btn_shown if has_pinned else clear_btn_hidden
+
+                return html.Div(), fig, False, True, btn_style, []
 
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                return (html.Div(f"Error: {e}"), go.Figure(), True, False, [], [], [])
+                return (html.Div(f"Error: {e}"), go.Figure(), True, False, clear_btn_hidden, [])
 
         @self.app.callback(
             Output("distributions-collapse", "is_open"),
@@ -918,17 +962,66 @@ class Simulator:
             return new_state, label
 
         @self.app.callback(
-            Output("download-report", "data"),
-            Input("export-button", "n_clicks"),
+            Output("rake-link-table", "selected_rows", allow_duplicate=True),
+            Output("service-table", "selected_rows", allow_duplicate=True),
+            Output("rake-3d-graph", "figure", allow_duplicate=True),
+            Output("clear-selections-button", "style", allow_duplicate=True),
+            Input("clear-selections-button", "n_clicks"),
+            State("rake-3d-graph", "figure"),
             prevent_initial_call=True,
         )
-        def trigger_download(n_clicks):
+        def clear_pinned(n_clicks, current_fig):
+            if not n_clicks:
+                raise PreventUpdate
+
+            self.gardi.query.pinnedLinks = []
+            self.gardi.query.pinnedServices = []
+            self.gardi.query.selectedLinks = []
+            self.gardi.query.selectedServices = []
+
+            fig = go.Figure(current_fig)
+            if self.gardi.query.type == FilterType.SERVICE:
+                self.gardi.highlight_services(fig, [])
+            else:
+                self.gardi.highlight_links(fig, [])
+
+            return [], [], fig, {"display": "none"}
+
+        @self.app.callback(
+            Output("download-report", "data"),
+            Input("export-xlsx-item", "n_clicks"),
+            prevent_initial_call=True,
+        )
+        def trigger_xlsx_download(n_clicks):
             filter_type = self.gardi.query.type.value if self.gardi.query.type else "unknown"
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename_xlsx = f"WTT_Export_{filter_type}_{timestamp}.xlsx"
 
             report_xlsx = self.gardi.export_xlsx()
             return dcc.send_data_frame(report_xlsx.to_excel, filename_xlsx, index=False)
+
+        @self.app.callback(
+            Output("download-pattern-csv", "data"),
+            Input("export-pattern-item", "n_clicks"),
+            prevent_initial_call=True,
+        )
+        def trigger_pattern_download(n_clicks):
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"Pattern_Segments_{timestamp}.csv"
+            csv_string = self.gardi.export_pattern_csv()
+            return dcc.send_string(csv_string, filename)
+
+        @self.app.callback(
+            Output("download-replacement", "data"),
+            Input("download-report-btn", "n_clicks"),
+            prevent_initial_call=True,
+        )
+        def trigger_replacement_download(n_clicks):
+            if not n_clicks or not self.gardi.converted_links:
+                raise PreventUpdate
+            text = self.gardi.generate_replacement_report()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            return dcc.send_string(text, f"Replacement_Report_{timestamp}.txt")
 
     def run(self, host, port):
         self.app.run(debug=self.debug, host=host, port=port)

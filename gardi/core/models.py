@@ -263,8 +263,14 @@ class TimeTable:
                 svc.generateStationEvents(parser)
                 if not svc.events:
                     raise ValueError(f"Service {svc.serviceId} has no events")
-                svc.initStation = self.stations[svc.events[0].atStation]
-                svc.finalStation = self.stations[svc.events[-1].atStation]
+                svc.initStation = self.stations.get(
+                    svc.events[0].atStation,
+                    Station(-1, svc.events[0].atStation)
+                )
+                svc.finalStation = self.stations.get(
+                    svc.events[-1].atStation,
+                    Station(-1, svc.events[-1].atStation)
+                )
 
                 svc.computeLengthKm()
                 rc.lengthKm += svc.lengthKm
@@ -493,12 +499,13 @@ class Service:
 
     def computeLengthKm(self):
         l = 0
-        dprev = DISTANCE_MAP[self.events[0].atStation]
+        dprev = DISTANCE_MAP.get(self.events[0].atStation)
         for e in self.events[1:]:
             stName = e.atStation
-            dCCGKm = DISTANCE_MAP[stName]
-            d = abs(dprev - dCCGKm)
-            l += d
+            dCCGKm = DISTANCE_MAP.get(stName)
+            if dprev is not None and dCCGKm is not None:
+                d = abs(dprev - dCCGKm)
+                l += d
             dprev = dCCGKm
         self.lengthKm = l
 
@@ -511,7 +518,40 @@ class Service:
 
         stName = None
         serviceCol = self.rawServiceCol
+        ex_station_override = None
+        consumed_rows = set()
         for rowIdx, cell in serviceCol.items():
+            if rowIdx in consumed_rows:
+                continue
+            cell_upper = str(cell).strip().upper()
+            if cell_upper == 'EX':
+                ex_station_override = 'pending'
+                continue
+            if ex_station_override == 'pending':
+                abbr = cell_upper.split()[0]
+                if abbr in parser.stationMap:
+                    ex_station_override = parser.stationMap[abbr].name.strip().upper()
+                elif abbr in parser.stations:
+                    ex_station_override = abbr
+                else:
+                    ex_station_override = None
+                continue
+            if not ex_station_override and cell_upper:
+                parts = cell_upper.split()
+                abbr_candidate = parts[0]
+                if abbr_candidate in parser.stationMap:
+                    # "CSTM ARR" / "CSTM DEP" / "CSTM ARR." in a single cell
+                    if len(parts) >= 2 and parts[1].rstrip('.') in ('ARR', 'DEP'):
+                        ex_station_override = parser.stationMap[abbr_candidate].name.strip().upper()
+                        continue
+                    # abbreviation and ARR/DEP in separate cells (handles "Arr.", "Dep.")
+                    pos_idx = serviceCol.index.get_loc(rowIdx)
+                    if pos_idx + 1 < len(serviceCol):
+                        next_val = str(serviceCol.iloc[pos_idx + 1]).strip().upper().rstrip('.')
+                        if next_val in ('ARR', 'DEP'):
+                            ex_station_override = parser.stationMap[abbr_candidate].name.strip().upper()
+                            consumed_rows.add(serviceCol.index[pos_idx + 1])
+                            continue
             match = parser.rTimePattern.search(str(cell))
             if match:
                 tCell = match.group(0)
@@ -521,6 +561,9 @@ class Service:
                     if pd.isna(stName) or not str(stName).strip():
                         stName = sheet.iat[rowIdx - 2, 0]
                 stName = normalize_station_name(stName)
+                if ex_station_override and ex_station_override != 'pending':
+                    stName = ex_station_override
+                    ex_station_override = None
                 if str(stName).strip() in parser.stations.keys():
                     station = parser.stations[str(stName).strip()]
                 elif "REVERSED" in str(stName).upper():
@@ -546,6 +589,7 @@ class Service:
                             e2 = StationEvent(stName, self, tDep, EventType.DEPARTURE)
                             self.events.append(e2)
                             parser.eventsByStationMap[stName].append(e2)
+                            consumed_rows.add(rowIdx + 1)
                     else:
                         pass
                 else:

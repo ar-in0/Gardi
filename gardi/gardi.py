@@ -20,6 +20,7 @@ class Gardi:
         self.summaryFileName = None
 
         self.linkTimingsCreated = False
+        self.converted_links = []
 
         self.query = FilterQuery()
         self.query.type = FilterType.RAKELINK
@@ -64,6 +65,18 @@ class Gardi:
         """generate RC -> reset flags -> apply filters -> build figure -> post-process"""
         qq = self.query
 
+        # Merge current selections into pinned sets (accumulate)
+        if qq.selectedLinks:
+            pinned_set = set(qq.pinnedLinks)
+            pinned_set.update(qq.selectedLinks)
+            qq.pinnedLinks = list(pinned_set)
+            qq.selectedLinks = []
+        if qq.selectedServices:
+            pinned_set = set(qq.pinnedServices)
+            pinned_set.update(qq.selectedServices)
+            qq.pinnedServices = list(pinned_set)
+            qq.selectedServices = []
+
         # First-time backend build
         if not self.linkTimingsCreated:
             self.parser.wtt.generateRakeCycles(self.parser)
@@ -71,6 +84,7 @@ class Gardi:
             self.linkTimingsCreated = True
         elif not skip_ac_reset:
             self.parser.wtt.resetACStates()
+            self.converted_links = []
 
         # Reset + filter
         self.filter_engine.reset_all_flags(self.parser.wtt)
@@ -82,21 +96,28 @@ class Gardi:
         # Station mode post-processing
         fig = self.graph_builder.post_process_station_mode(fig, qq, self.parser.wtt, self.parser)
 
-        # Re-apply highlighting if there were selections
-        if qq.selectedLinks:
-            self.graph_builder.highlight_links(fig, qq.selectedLinks)
-
         return fig
 
     def convert_to_ac(self, link_names):
         result = self.rake_ops.convert_to_ac(self.parser.wtt, link_names)
+        self.converted_links.extend(result["links"])
         return result
 
+    def generate_replacement_report(self):
+        from gardi.core.replacement_analyzer import ReplacementAnalyzer, format_report
+        analyzer = ReplacementAnalyzer(self.parser.wtt, self.parser)
+        report = analyzer.evaluate(self.converted_links)
+        return format_report(report)
+
     def build_service_table(self):
-        return self.data_builder.build_service_table_data(self.parser.wtt)
+        return self.data_builder.build_service_table_data(
+            self.parser.wtt, pinned_services=self.query.pinnedServices
+        )
 
     def build_rake_table(self):
-        return self.data_builder.build_rake_table_data(self.parser.wtt)
+        return self.data_builder.build_rake_table_data(
+            self.parser.wtt, pinned_links=self.query.pinnedLinks
+        )
 
     def build_station_gap_summary(self):
         return self.data_builder.build_station_gap_summary(self.parser, self.query)
@@ -340,6 +361,9 @@ class Gardi:
 
     def export_traversal_csv(self):
         return self.csv_builder.traversalTimes(self.parser.wtt)
+
+    def export_pattern_csv(self):
+        return self.csv_builder.patternSegments(self.parser.wtt)
 
     def is_valid_xlsx(self, filename):
         return bool(filename) and filename.lower().endswith(".xlsx")
