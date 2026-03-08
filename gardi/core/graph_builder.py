@@ -6,8 +6,8 @@ from gardi.core.models import DISTANCE_MAP
 
 
 OFF_NETWORK_Y = {
-    "CHATTRAPATI SHIVAJI MAHARAJ TERMINUS": -5,
-    "PANVEL": -15,
+    "CHATTRAPATI SHIVAJI MAHARAJ TERMINUS": -2,
+    "PANVEL": -6,
 }
 
 
@@ -271,25 +271,7 @@ class GraphBuilder:
                 aspectratio=dict(x=2.8, y=1.2, z=1.2),
             ),
             scene_camera_projection_type="orthographic",
-            updatemenus=[dict(
-                type="buttons",
-                buttons=[
-                    dict(label="Front", method="relayout", args=[{
-                        "scene.camera.eye": {"x": 0, "y": 0, "z": 2.5},
-                        "scene.camera.up": {"x": 0, "y": 1, "z": 0},
-                    }]),
-                    dict(label="Top", method="relayout", args=[{
-                        "scene.camera.eye": {"x": 0, "y": 2.5, "z": 0},
-                        "scene.camera.up": {"x": 0, "y": 1, "z": 0},
-                    }]),
-                ],
-                direction="left",
-                showactive=True,
-                x=0.0,
-                y=1.05,
-                bgcolor="rgba(40,40,40,0.8)",
-                font=dict(color="#CCCCCC"),
-            )],
+            updatemenus=[],
             width=1300,
             height=700,
             margin=dict(t=30, l=5, b=5, r=5),

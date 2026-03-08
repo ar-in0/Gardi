@@ -634,7 +634,7 @@ class GardiUI:
                     dbc.Button(
                         "Reset",
                         id="reset-ac-button",
-                        color="warning",
+                        color="danger",
                         outline=True,
                         size="sm",
                     ),
@@ -886,8 +886,8 @@ class GardiUI:
         return html.Div(
             [
                 dcc.Store(id="graph-ready", data=False),
-                html.Div(id="status-div", className="text-box"),
                 self.drawExportButtonRow(),
+                html.Div(id="status-div", className="text-box"),
                 dcc.Download(id="download-report"),
                 dcc.Download(id="download-pattern-csv"),
                 dcc.Download(id="download-replacement"),

@@ -74,6 +74,7 @@ class Simulator:
         self.app = dash.Dash(
             external_stylesheets=[dbc.themes.BOOTSTRAP],
             assets_folder=assets_dir,
+            suppress_callback_exceptions=True,
         )
         self.gardi = Gardi()
         self._ui = GardiUI()
@@ -458,9 +459,10 @@ class Simulator:
 
             # Regenerate visualization (keep the AC conversion we just applied)
             fig = self.gardi.generate_visualization(skip_ac_reset=True)
+            self.gardi.highlight_links(fig, self.gardi.converted_links)
 
             status_msg = html.Div([
-                f"Converted to AC: {', '.join(result['links'])}",
+                f"Converted to AC: {', '.join(sorted(self.gardi.converted_links))}",
                 dbc.Button("Download Report", id="download-report-btn", size="sm", color="link"),
             ])
 
@@ -543,8 +545,7 @@ class Simulator:
             else:
                 self.gardi.highlight_services(fig, [])  # all full opacity
 
-            has_pinned = bool(self.gardi.query.pinnedLinks or self.gardi.query.pinnedServices)
-            btn_style = clear_btn_shown if has_pinned else clear_btn_hidden
+            btn_style = clear_btn_shown if selected_rows else clear_btn_hidden
 
             return fig, btn_style
 
@@ -640,8 +641,7 @@ class Simulator:
             else:
                 self.gardi.highlight_links(fig, [])  # all full opacity
 
-            has_pinned = bool(self.gardi.query.pinnedLinks or self.gardi.query.pinnedServices)
-            btn_style = clear_btn_shown if has_pinned else clear_btn_hidden
+            btn_style = clear_btn_shown if selected_rows else clear_btn_hidden
 
             return fig, btn_style
 
