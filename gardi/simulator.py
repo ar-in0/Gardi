@@ -403,11 +403,11 @@ class Simulator:
         def reset_ac_conversions(n_clicks, current_fig):
             if not n_clicks:
                 raise PreventUpdate
-            status_msg = html.Div(
-                "Reset functionality requires storing original state",
-                style={"padding": "8px", "color": "#f59e0b"},
-            )
-            raise PreventUpdate
+            self.gardi.parser.wtt.resetACStates()
+            self.gardi.converted_links = []
+            rows, pinned_indices = self.gardi.build_rake_table()
+            fig = self.gardi.generate_visualization(skip_ac_reset=True)
+            return fig, rows, ""
 
         @self.app.callback(
             Output("convert-ac-button", "disabled"),
@@ -459,18 +459,10 @@ class Simulator:
             # Regenerate visualization (keep the AC conversion we just applied)
             fig = self.gardi.generate_visualization(skip_ac_reset=True)
 
-            status_msg = html.Div(
-                [
-                    html.Span(f"Converted {result['converted']} rake link(s) to AC: "),
-                    html.Span(", ".join(result["links"]), style={"fontWeight": "500"}),
-                ],
-                style={
-                    "padding": "8px 12px",
-                    "borderLeft": "3px solid #10b981",
-                    "borderRadius": "4px",
-                    "marginBottom": "8px",
-                },
-            )
+            status_msg = html.Div([
+                f"Converted to AC: {', '.join(result['links'])}",
+                dbc.Button("Download Report", id="download-report-btn", size="sm", color="link"),
+            ])
 
             return fig, updated_table, status_msg
 
@@ -1018,6 +1010,18 @@ class Simulator:
             filename = f"Pattern_Segments_{timestamp}.csv"
             csv_string = self.gardi.export_pattern_csv()
             return dcc.send_string(csv_string, filename)
+
+        @self.app.callback(
+            Output("download-replacement", "data"),
+            Input("download-report-btn", "n_clicks"),
+            prevent_initial_call=True,
+        )
+        def trigger_replacement_download(n_clicks):
+            if not n_clicks or not self.gardi.converted_links:
+                raise PreventUpdate
+            text = self.gardi.generate_replacement_report()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            return dcc.send_string(text, f"Replacement_Report_{timestamp}.txt")
 
     def run(self, host, port):
         self.app.run(debug=self.debug, host=host, port=port)

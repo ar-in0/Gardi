@@ -20,6 +20,7 @@ class Gardi:
         self.summaryFileName = None
 
         self.linkTimingsCreated = False
+        self.converted_links = []
 
         self.query = FilterQuery()
         self.query.type = FilterType.RAKELINK
@@ -83,6 +84,7 @@ class Gardi:
             self.linkTimingsCreated = True
         elif not skip_ac_reset:
             self.parser.wtt.resetACStates()
+            self.converted_links = []
 
         # Reset + filter
         self.filter_engine.reset_all_flags(self.parser.wtt)
@@ -98,7 +100,14 @@ class Gardi:
 
     def convert_to_ac(self, link_names):
         result = self.rake_ops.convert_to_ac(self.parser.wtt, link_names)
+        self.converted_links.extend(result["links"])
         return result
+
+    def generate_replacement_report(self):
+        from gardi.core.replacement_analyzer import ReplacementAnalyzer, format_report
+        analyzer = ReplacementAnalyzer(self.parser.wtt, self.parser)
+        report = analyzer.evaluate(self.converted_links)
+        return format_report(report)
 
     def build_service_table(self):
         return self.data_builder.build_service_table_data(

@@ -638,7 +638,7 @@ class GardiUI:
                         outline=True,
                         size="sm",
                     ),
-                    style={"marginLeft": "4px", "display": "None"},
+                    style={"marginLeft": "4px"},
                 ),
                 html.Div(
                     dbc.DropdownMenu(
@@ -890,6 +890,7 @@ class GardiUI:
                 self.drawExportButtonRow(),
                 dcc.Download(id="download-report"),
                 dcc.Download(id="download-pattern-csv"),
+                dcc.Download(id="download-replacement"),
                 self.drawDynamicContent(),
                 html.Div(id="right-panel-content", style={"marginTop": "10px"}),
             ],
