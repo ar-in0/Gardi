@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
-from dash import html, dash_table
+from dash import html, dcc, dash_table
+import dash_bootstrap_components as dbc
 
 from gardi.core.parser import TimeTableParser
 from gardi.core.filters import FilterType, FilterQuery, FilterEngine
 from gardi.core.graph_builder import GraphBuilder
-from gardi.core.data_builder import DataBuilder, fmt_time
+from gardi.core.data_builder import DataBuilder, fmt_time, make_summary_card
 from gardi.core.rake_operations import RakeOperations
 from gardi.core.csv_builder import CsvBuilder
 from gardi.ui import build_service_row
@@ -21,6 +22,8 @@ class Gardi:
 
         self.linkTimingsCreated = False
         self.converted_links = []
+        self._cached_report = None
+        self._cached_report_links = None
 
         self.query = FilterQuery()
         self.query.type = FilterType.RAKELINK
@@ -101,13 +104,27 @@ class Gardi:
     def convert_to_ac(self, link_names):
         result = self.rake_ops.convert_to_ac(self.parser.wtt, link_names)
         self.converted_links.extend(result["links"])
+        self._cached_report = None  # invalidate cache
         return result
 
-    def generate_replacement_report(self):
-        from gardi.core.replacement_analyzer import ReplacementAnalyzer, format_report
+    def _get_replacement_report(self):
+        """Get cached ReplacementReport, recomputing if converted_links changed."""
+        links_key = tuple(sorted(self.converted_links))
+        if self._cached_report is not None and self._cached_report_links == links_key:
+            return self._cached_report
+        from gardi.core.replacement_analyzer import ReplacementAnalyzer
         analyzer = ReplacementAnalyzer(self.parser.wtt, self.parser)
-        report = analyzer.evaluate(self.converted_links)
-        return format_report(report)
+        self._cached_report = analyzer.evaluate(self.converted_links)
+        self._cached_report_links = links_key
+        return self._cached_report
+
+    def generate_replacement_report(self):
+        from gardi.core.replacement_analyzer import format_report
+        return format_report(self._get_replacement_report())
+
+    def generate_replacement_xlsx(self):
+        from gardi.core.replacement_analyzer import exportReportXlsx
+        return exportReportXlsx(self._get_replacement_report())
 
     def build_service_table(self):
         return self.data_builder.build_service_table_data(
@@ -255,6 +272,8 @@ class Gardi:
 
     def _build_rake_link_query_info(self):
         if not self.query.selectedLinks:
+            if self.converted_links:
+                return self.buildACAnalysisPanel()
             return html.Div("No rake links selected.")
 
         selected_rcs = [
@@ -263,7 +282,7 @@ class Gardi:
             if rc.linkName in self.query.selectedLinks
         ]
 
-        return html.Div(
+        rakelink_details = html.Div(
             [
                 html.Div(
                     "Selected Rake Links",
@@ -278,6 +297,18 @@ class Gardi:
             ],
             style={"padding": "8px"},
         )
+
+        # If AC conversions exist, show side-by-side layout + analysis below
+        if self.converted_links:
+            ac_panel = self.buildACAnalysisPanel()
+            return html.Div([
+                dbc.Row([
+                    dbc.Col(rakelink_details, md=6),
+                    dbc.Col(ac_panel, md=6),
+                ], className="g-2"),
+            ])
+
+        return rakelink_details
 
     def _build_rake_path_block(self, rc):
         services = rc.servicePath
@@ -319,6 +350,157 @@ class Gardi:
             ]
         )
 
+    def buildACAnalysisPanel(self):
+        """Build inline AC analysis visualizations from cached report."""
+        import plotly.graph_objs as go
+        from plotly.subplots import make_subplots
+
+        report = self._get_replacement_report()
+        children = []
+
+        # 1. Before/After summary cards
+        if report.beforeAfterMetrics:
+            ba = report.beforeAfterMetrics
+            b, a, d = ba["before"], ba["after"], ba["delta"]
+            before_card = make_summary_card("Before Conversion", [
+                f"AC services: {b['ac_services']}",
+                f"AC coverage: {b['ac_pct']}%",
+                f"Peak AC stops: {sum(b.get('peak_ac_frequency', {}).values())}",
+            ])
+            after_card = make_summary_card("After Conversion", [
+                f"AC services: {a['ac_services']}",
+                f"AC coverage: {a['ac_pct']}%",
+                f"Peak AC stops: {sum(a.get('peak_ac_frequency', {}).values())}",
+            ], footer=f"+{d['ac_services']} services (+{d['ac_pct']}%)")
+            children.append(
+                dbc.Row([
+                    dbc.Col(before_card, width=6),
+                    dbc.Col(after_card, width=6),
+                ], className="g-2 mb-3")
+            )
+
+        # 2. AC density heatmap (before | after side-by-side)
+        if report.acDensityByTod:
+            density = report.acDensityByTod
+            stations = density["stations"]
+            buckets = density["buckets"]
+
+            def make_z(data):
+                return [[data[s].get(b, 0) for b in buckets] for s in stations]
+
+            fig = make_subplots(rows=1, cols=2, subplot_titles=["Before", "After"],
+                                horizontal_spacing=0.08)
+            fig.add_trace(go.Heatmap(
+                z=make_z(density["before"]), x=buckets, y=stations,
+                colorscale="Blues", showscale=False,
+            ), row=1, col=1)
+            fig.add_trace(go.Heatmap(
+                z=make_z(density["after"]), x=buckets, y=stations,
+                colorscale="Blues", showscale=True,
+                colorbar=dict(title="Services", len=0.8),
+            ), row=1, col=2)
+            fig.update_layout(
+                height=max(200, len(stations) * 18 + 60),
+                margin=dict(l=100, r=40, t=30, b=30),
+                paper_bgcolor="white", plot_bgcolor="white",
+                font=dict(size=11),
+            )
+            children.append(html.Div([
+                html.Div("AC Service Density by Hour", style={
+                    "fontSize": "13px", "fontWeight": "600", "color": "#475569", "marginBottom": "4px",
+                }),
+                dcc.Graph(id="ac-density-chart", figure=fig,
+                          config={"displayModeBar": False},
+                          style={"width": "100%"}),
+            ], className="mb-3"))
+
+        # 3. AC headway gaps bar chart
+        if report.headwayGaps:
+            gap_stations = [f"{e['station']} ({e['direction']})" for e in report.headwayGaps]
+            default_station = gap_stations[0] if gap_stations else None
+
+            # Build a dropdown + chart for the worst-gap station
+            options = [{"label": s, "value": i} for i, s in enumerate(gap_stations)]
+
+            # Default chart: worst station
+            entry = report.headwayGaps[0]
+            gap_fig = go.Figure(go.Bar(
+                x=list(range(len(entry["gaps"]))),
+                y=entry["gaps"],
+                marker_color=["#ef4444" if g >= 15 else "#3b82f6" for g in entry["gaps"]],
+            ))
+            gap_fig.add_hline(y=15, line_dash="dash", line_color="#94a3b8",
+                              annotation_text="15 min threshold")
+            gap_fig.update_layout(
+                height=200, margin=dict(l=40, r=20, t=10, b=30),
+                paper_bgcolor="white", plot_bgcolor="white",
+                xaxis_title="Gap #", yaxis_title="Minutes",
+                font=dict(size=11),
+            )
+
+            children.append(html.Div([
+                html.Div("AC Headway Gaps", style={
+                    "fontSize": "13px", "fontWeight": "600", "color": "#475569", "marginBottom": "4px",
+                }),
+                dcc.Dropdown(
+                    id="ac-headway-station-dropdown",
+                    options=options,
+                    value=0,
+                    clearable=False,
+                    style={"fontSize": "12px", "marginBottom": "4px"},
+                ),
+                dcc.Graph(id="ac-headway-chart", figure=gap_fig,
+                          config={"displayModeBar": False},
+                          style={"width": "100%"}),
+            ], className="mb-3"))
+
+        # 4. Followings adjacency heatmap
+        fol = report.followings
+        if fol and fol["nodes"] and fol["matrix"]:
+            nodes = fol["nodes"]
+            ac_pair_set = set(tuple(p) for p in fol.get("ac_ac_pairs", []))
+            z = []
+            annotations = []
+            for i, row_node in enumerate(nodes):
+                row_vals = []
+                for j, col_node in enumerate(nodes):
+                    if i == j:
+                        row_vals.append(0)
+                    else:
+                        pair = tuple(sorted([row_node, col_node]))
+                        w = fol["matrix"].get(pair, 0)
+                        row_vals.append(w)
+                        if pair in ac_pair_set and w > 0:
+                            annotations.append(dict(
+                                x=j, y=i, text="*", showarrow=False,
+                                font=dict(color="red", size=10),
+                            ))
+                z.append(row_vals)
+
+            fol_fig = go.Figure(go.Heatmap(
+                z=z, x=nodes, y=nodes,
+                colorscale="Viridis", showscale=True,
+                colorbar=dict(title="Weight", len=0.8),
+            ))
+            fol_fig.update_layout(
+                height=max(250, len(nodes) * 22 + 60),
+                margin=dict(l=80, r=40, t=10, b=60),
+                paper_bgcolor="white", plot_bgcolor="white",
+                font=dict(size=10),
+                annotations=annotations,
+                xaxis=dict(tickangle=-45),
+            )
+            children.append(html.Div([
+                html.Div("Link Followings (* = AC-AC pair)", style={
+                    "fontSize": "13px", "fontWeight": "600", "color": "#475569", "marginBottom": "4px",
+                }),
+                dcc.Graph(id="ac-followings-chart", figure=fol_fig,
+                          config={"displayModeBar": False},
+                          style={"width": "100%"}),
+            ], className="mb-3"))
+
+        return html.Div(children, style={"padding": "8px"}) if children else html.Div()
+
     def _build_minimal_rake_block(self, rc):
         rows = []
         for i, svc in enumerate(rc.servicePath, start=1):
@@ -358,6 +540,31 @@ class Gardi:
                 html.Hr(),
             ]
         )
+
+    def export_all_services_csv(self):
+        return self.csv_builder.allServices(self.parser.wtt)
+
+    def export_turnaround_csv(self):
+        """Compute turnarounds for all terminal stations of rendered services."""
+        terminals = set()
+        for svc in self.parser.wtt.suburbanServices:
+            if not svc.render or not svc.events:
+                continue
+            last_station = svc.events[-1].atStation
+            if last_station:
+                terminals.add(last_station)
+
+        parts = []
+        for station in sorted(terminals):
+            try:
+                csv_str = self.csv_builder.turnaround(self.parser.wtt, station)
+                parts.append(csv_str)
+            except ValueError:
+                continue
+        return "\n".join(parts) if parts else "# No turnaround data found\n"
+
+    def export_timing_split_csv(self):
+        return self.csv_builder.timingSplit(self.parser.wtt)
 
     def export_traversal_csv(self):
         return self.csv_builder.traversalTimes(self.parser.wtt)

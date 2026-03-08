@@ -641,23 +641,61 @@ class GardiUI:
                     style={"marginLeft": "4px"},
                 ),
                 html.Div(
-                    dbc.DropdownMenu(
-                        label="Export",
-                        children=[
-                            dbc.DropdownMenuItem(
-                                "Export Summary (XLSX)",
-                                id="export-xlsx-item",
-                            ),
-                            dbc.DropdownMenuItem(
-                                "Export Pattern Segments (CSV)",
-                                id="export-pattern-item",
-                            ),
-                        ],
-                        id="export-button",
-                        color="secondary",
-                        size="sm",
-                        disabled=True,
-                    ),
+                    [
+                        dbc.DropdownMenu(
+                            label="Export",
+                            children=[
+                                dbc.DropdownMenuItem(
+                                    "Export Summary (XLSX)",
+                                    id="export-xlsx-item",
+                                ),
+                            ],
+                            id="export-rakelink-menu",
+                            color="secondary",
+                            size="sm",
+                            disabled=True,
+                        ),
+                        dbc.DropdownMenu(
+                            label="Export",
+                            children=[
+                                dbc.DropdownMenuItem(
+                                    "All Services (CSV)",
+                                    id="export-all-services-item",
+                                ),
+                                dbc.DropdownMenuItem(
+                                    "Turnaround Times (CSV)",
+                                    id="export-turnaround-item",
+                                ),
+                                dbc.DropdownMenuItem(
+                                    "Timing Split (CSV)",
+                                    id="export-timing-split-item",
+                                ),
+                                dbc.DropdownMenuItem(
+                                    "Pattern Segments (CSV)",
+                                    id="export-pattern-item",
+                                ),
+                            ],
+                            id="export-service-menu",
+                            color="secondary",
+                            size="sm",
+                            disabled=True,
+                            style={"display": "none"},
+                        ),
+                        dbc.DropdownMenu(
+                            label="Export",
+                            children=[
+                                dbc.DropdownMenuItem(
+                                    "Traversal Times (CSV)",
+                                    id="export-traversal-item",
+                                ),
+                            ],
+                            id="export-station-menu",
+                            color="secondary",
+                            size="sm",
+                            disabled=True,
+                            style={"display": "none"},
+                        ),
+                    ],
                     className="ms-auto",
                 ),
             ],
@@ -891,6 +929,7 @@ class GardiUI:
                 dcc.Download(id="download-report"),
                 dcc.Download(id="download-pattern-csv"),
                 dcc.Download(id="download-replacement"),
+                dcc.Download(id="download-csv-generic"),
                 self.drawDynamicContent(),
                 html.Div(id="right-panel-content", style={"marginTop": "10px"}),
             ],

@@ -2,10 +2,14 @@
 
 Analyzer methods return structured data (dicts, dataclasses).
 format_report() provides thin CLI formatting.
+exportReportXlsx() produces structured XLSX output.
 """
 
+import io
 from collections import defaultdict
 from dataclasses import dataclass, field
+
+import pandas as pd
 
 from gardi.core.data_builder import fmt_time
 from gardi.core.models import (
@@ -26,7 +30,8 @@ class ArrivalEntry:
     time: float               # minutes since midnight
     service_id: str
     rakelink: str
-    is_ac: bool
+    is_ac: bool               # AC state after conversion
+    originally_ac: bool       # AC state before conversion
     direction: str            # "UP" or "DOWN"
 
 
@@ -53,6 +58,9 @@ class ReplacementReport:
     followings: dict
     profiles: dict                    # link name -> RakeLinkProfile
     station_arrivals: list = None     # ArrivalEntry list if station specified
+    beforeAfterMetrics: dict = None   # before/after AC service metrics
+    headwayGaps: list = None          # AC headway gaps by station
+    acDensityByTod: dict = None       # AC density by time-of-day
 
 
 class ReplacementAnalyzer:
@@ -127,7 +135,8 @@ class ReplacementAnalyzer:
             sid = str(svc.serviceId[0]) if svc.serviceId else "?"
             rakelink = self.svc_to_link.get(sid, "?")
 
-            is_ac = svc.needsACRake or (rakelink in replacement_set)
+            originally_ac = svc.needsACRake
+            is_ac = originally_ac or (rakelink in replacement_set)
             seen_stations = set()
             for evt in svc.events:
                 if evt.atStation not in DISTANCE_MAP:
@@ -141,6 +150,7 @@ class ReplacementAnalyzer:
                             service_id=sid,
                             rakelink=rakelink,
                             is_ac=is_ac,
+                            originally_ac=originally_ac,
                             direction=direction,
                         ))
 
@@ -280,6 +290,142 @@ class ReplacementAnalyzer:
             "total_ac_ac_followings": ac_pair_weight,
         }
 
+    def computeBeforeAfterMetrics(self, by_station, replacement_set):
+        """Compute before/after AC service metrics.
+
+        Returns {"before": {...}, "after": {...}, "delta": {...}}
+        """
+        rset = set(replacement_set)
+        all_arrivals = [a for arrivals in by_station.values() for a in arrivals]
+
+        # Unique services (by service_id)
+        before_ac_svcs = set()
+        after_ac_svcs = set()
+        total_svcs = set()
+        for a in all_arrivals:
+            total_svcs.add(a.service_id)
+            if a.originally_ac:
+                before_ac_svcs.add(a.service_id)
+            if a.is_ac:
+                after_ac_svcs.add(a.service_id)
+
+        total = len(total_svcs)
+
+        # Per-station AC coverage (fraction of arrivals that are AC)
+        station_before = defaultdict(lambda: {"ac": 0, "total": 0})
+        station_after = defaultdict(lambda: {"ac": 0, "total": 0})
+        for a in all_arrivals:
+            station_before[a.station]["total"] += 1
+            station_after[a.station]["total"] += 1
+            if a.originally_ac:
+                station_before[a.station]["ac"] += 1
+            if a.is_ac:
+                station_after[a.station]["ac"] += 1
+
+        def pct(d):
+            return {s: round(v["ac"] / v["total"] * 100, 1) if v["total"] > 0 else 0
+                    for s, v in d.items()}
+
+        # Peak-hour AC frequency at top stations
+        def peak_ac_count(arrivals, use_after=False):
+            counts = defaultdict(int)
+            for a in arrivals:
+                is_peak = any(lo <= a.time <= hi for lo, hi in [PEAK_MORNING, PEAK_EVENING])
+                if not is_peak:
+                    continue
+                ac = a.is_ac if use_after else a.originally_ac
+                if ac:
+                    counts[a.station] += 1
+            return dict(counts)
+
+        before = {
+            "ac_services": len(before_ac_svcs),
+            "ac_pct": round(len(before_ac_svcs) / total * 100, 1) if total else 0,
+            "station_ac_pct": pct(station_before),
+            "peak_ac_frequency": peak_ac_count(all_arrivals, use_after=False),
+        }
+        after = {
+            "ac_services": len(after_ac_svcs),
+            "ac_pct": round(len(after_ac_svcs) / total * 100, 1) if total else 0,
+            "station_ac_pct": pct(station_after),
+            "peak_ac_frequency": peak_ac_count(all_arrivals, use_after=True),
+        }
+        delta = {
+            "ac_services": after["ac_services"] - before["ac_services"],
+            "ac_pct": round(after["ac_pct"] - before["ac_pct"], 1),
+        }
+        return {"before": before, "after": after, "delta": delta, "total_services": total}
+
+    def computeACHeadwayGaps(self, by_station, replacement_set, thresholdMinutes=15):
+        """Compute AC headway gaps per (station, direction).
+
+        Returns list of {"station", "direction", "gaps", "maxGap", "meanGap", "count"}
+        sorted by worst gap descending.
+        """
+        results = []
+        for (station, direction), arrivals in by_station.items():
+            ac_arrivals = [a for a in arrivals if a.is_ac]
+            if len(ac_arrivals) < 2:
+                continue
+
+            gaps = []
+            for i in range(len(ac_arrivals) - 1):
+                gap = ac_arrivals[i + 1].time - ac_arrivals[i].time
+                if gap > 0:
+                    gaps.append(round(gap, 1))
+
+            if not gaps:
+                continue
+
+            results.append({
+                "station": station,
+                "direction": direction,
+                "gaps": gaps,
+                "maxGap": max(gaps),
+                "meanGap": round(sum(gaps) / len(gaps), 1),
+                "count": len(gaps),
+                "exceedances": sum(1 for g in gaps if g >= thresholdMinutes),
+            })
+
+        results.sort(key=lambda r: -r["maxGap"])
+        return results
+
+    def computeACDensityByTimeOfDay(self, by_station, replacement_set, bucketMinutes=60):
+        """Compute station x time-bucket matrix of AC service counts.
+
+        Returns {"stations", "buckets", "before", "after"} where before/after are
+        {station: {bucket_label: count}} dicts.
+        """
+        n_buckets = 1440 // bucketMinutes
+        bucket_labels = []
+        for i in range(n_buckets):
+            start_m = i * bucketMinutes
+            bucket_labels.append(f"{start_m // 60:02d}:{start_m % 60:02d}")
+
+        stations = sorted(
+            set(a.station for arrivals in by_station.values() for a in arrivals),
+            key=lambda s: DISTANCE_MAP.get(s, 999),
+        )
+
+        before = {s: {b: 0 for b in bucket_labels} for s in stations}
+        after = {s: {b: 0 for b in bucket_labels} for s in stations}
+
+        for (station, _direction), arrivals in by_station.items():
+            for a in arrivals:
+                bucket_idx = min(int(a.time // bucketMinutes), n_buckets - 1)
+                bl = bucket_labels[bucket_idx]
+                if a.originally_ac:
+                    before[station][bl] += 1
+                if a.is_ac:
+                    after[station][bl] += 1
+
+        return {
+            "stations": stations,
+            "buckets": bucket_labels,
+            "before": before,
+            "after": after,
+        }
+
     def station_sequence(self, station, direction, by_station, time_windows=None):
         """Return raw arrival sequence at a station, optionally filtered to time windows."""
         results = []
@@ -306,6 +452,11 @@ class ReplacementAnalyzer:
 
         profiles = {name: self.profiles[name] for name in replacement_set if name in self.profiles}
 
+        # Enriched analysis
+        before_after = self.computeBeforeAfterMetrics(by_station, replacement_set)
+        headway_gaps = self.computeACHeadwayGaps(by_station, replacement_set)
+        density = self.computeACDensityByTimeOfDay(by_station, replacement_set)
+
         report = ReplacementReport(
             replacement_set=replacement_set,
             depot=depot,
@@ -313,6 +464,9 @@ class ReplacementAnalyzer:
             coverage=coverage,
             followings=followings,
             profiles=profiles,
+            beforeAfterMetrics=before_after,
+            headwayGaps=headway_gaps,
+            acDensityByTod=density,
         )
 
         if station:
@@ -418,6 +572,42 @@ def format_report(report):
         prof_lines.append(f"  {p.name}: {p.depot_start}->{p.depot_end}  {p.length_km}km  {dur_h}h{dur_m:02d}m  {p.n_services} svcs  {lt}")
     parts.append("\n".join(prof_lines))
 
+    # Before/After AC Metrics
+    if report.beforeAfterMetrics:
+        ba = report.beforeAfterMetrics
+        b, a, d = ba["before"], ba["after"], ba["delta"]
+        ba_lines = ["NETWORK IMPACT SUMMARY"]
+        ba_lines.append(f"  Total services analyzed: {ba['total_services']}")
+        ba_lines.append(f"  AC services before: {b['ac_services']} ({b['ac_pct']}%)")
+        ba_lines.append(f"  AC services after:  {a['ac_services']} ({a['ac_pct']}%)")
+        ba_lines.append(f"  Delta: +{d['ac_services']} services (+{d['ac_pct']}%)")
+
+        # Top stations by AC coverage improvement
+        if b.get("station_ac_pct") and a.get("station_ac_pct"):
+            improvements = []
+            for s in a["station_ac_pct"]:
+                before_pct = b["station_ac_pct"].get(s, 0)
+                after_pct = a["station_ac_pct"].get(s, 0)
+                if after_pct > before_pct:
+                    improvements.append((s, before_pct, after_pct))
+            improvements.sort(key=lambda x: -(x[2] - x[1]))
+            if improvements:
+                ba_lines.append("  Top AC coverage improvements:")
+                for s, bp, ap in improvements[:10]:
+                    ba_lines.append(f"    {s:20} {bp:5.1f}% -> {ap:5.1f}%")
+        parts.append("\n".join(ba_lines))
+
+    # AC Headway Gaps
+    if report.headwayGaps:
+        hg_lines = ["AC HEADWAY GAPS (worst first)"]
+        for entry in report.headwayGaps[:15]:
+            hg_lines.append(
+                f"  {entry['station']:20} {entry['direction']:<4}  "
+                f"max={entry['maxGap']:.0f}m  mean={entry['meanGap']:.0f}m  "
+                f"gaps={entry['count']}  >15m={entry['exceedances']}"
+            )
+        parts.append("\n".join(hg_lines))
+
     # Station arrivals
     if report.station_arrivals is not None:
         station_name = report.station_arrivals[0].station if report.station_arrivals else "?"
@@ -431,3 +621,114 @@ def format_report(report):
         parts.append("\n".join(arr_lines))
 
     return "\n\n".join(parts)
+
+
+def exportReportXlsx(report):
+    """Generate structured XLSX report from a ReplacementReport.
+
+    Returns io.BytesIO buffer ready for download.
+    """
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        # Sheet 1: Before vs After
+        if report.beforeAfterMetrics:
+            ba = report.beforeAfterMetrics
+            b, a, d = ba["before"], ba["after"], ba["delta"]
+            rows = [
+                {"Metric": "Total Services", "Before": ba["total_services"], "After": ba["total_services"], "Delta": 0},
+                {"Metric": "AC Services", "Before": b["ac_services"], "After": a["ac_services"], "Delta": d["ac_services"]},
+                {"Metric": "AC %", "Before": b["ac_pct"], "After": a["ac_pct"], "Delta": d["ac_pct"]},
+            ]
+            # Add per-station AC%
+            for s in sorted(a.get("station_ac_pct", {}).keys(), key=lambda x: DISTANCE_MAP.get(x, 999)):
+                bp = b["station_ac_pct"].get(s, 0)
+                ap = a["station_ac_pct"].get(s, 0)
+                rows.append({"Metric": f"AC% {s}", "Before": bp, "After": ap, "Delta": round(ap - bp, 1)})
+            pd.DataFrame(rows).to_excel(writer, sheet_name="Before vs After", index=False)
+
+        # Sheet 2: AC Headway Gaps
+        if report.headwayGaps:
+            rows = []
+            for entry in report.headwayGaps:
+                rows.append({
+                    "Station": entry["station"],
+                    "Direction": entry["direction"],
+                    "Max Gap (min)": entry["maxGap"],
+                    "Mean Gap (min)": entry["meanGap"],
+                    "Gap Count": entry["count"],
+                    "Gaps > 15min": entry["exceedances"],
+                })
+            pd.DataFrame(rows).to_excel(writer, sheet_name="AC Headway Gaps", index=False)
+
+        # Sheet 3: Station Coverage
+        cov = report.coverage
+        if cov and cov["stations"]:
+            rows = []
+            for stn in cov["stations"]:
+                row = {"Station": stn, "Distance (km)": DISTANCE_MAP.get(stn, 0)}
+                for lk in cov["links"]:
+                    row[lk] = cov["matrix"].get(stn, {}).get(lk, 0)
+                rows.append(row)
+            pd.DataFrame(rows).to_excel(writer, sheet_name="Station Coverage", index=False)
+
+        # Sheet 4: AC Density by Hour
+        if report.acDensityByTod:
+            density = report.acDensityByTod
+            rows = []
+            for s in density["stations"]:
+                row_before = {"Station": s, "State": "Before"}
+                row_after = {"Station": s, "State": "After"}
+                for bl in density["buckets"]:
+                    row_before[bl] = density["before"][s].get(bl, 0)
+                    row_after[bl] = density["after"][s].get(bl, 0)
+                rows.append(row_before)
+                rows.append(row_after)
+            pd.DataFrame(rows).to_excel(writer, sheet_name="AC Density by Hour", index=False)
+
+        # Sheet 5: Link Followings
+        fol = report.followings
+        if fol and fol["matrix"]:
+            ac_pair_set = set(tuple(p) for p in fol.get("ac_ac_pairs", []))
+            rows = []
+            for (a, b), w in sorted(fol["matrix"].items(), key=lambda x: -x[1]):
+                rows.append({
+                    "Link A": a,
+                    "Link B": b,
+                    "Weight": w,
+                    "AC-AC": "Yes" if (a, b) in ac_pair_set else "No",
+                })
+            pd.DataFrame(rows).to_excel(writer, sheet_name="Link Followings", index=False)
+
+        # Sheet 6: Link Profiles
+        if report.profiles:
+            rows = []
+            for name, p in report.profiles.items():
+                lt = ",".join(l.value for l in p.line_types) if p.line_types else "?"
+                rows.append({
+                    "Link": p.name,
+                    "Depot Start": p.depot_start,
+                    "Depot End": p.depot_end,
+                    "Distance (km)": p.length_km,
+                    "Duration (min)": p.duration_minutes,
+                    "Services": p.n_services,
+                    "Line Types": lt,
+                    "Is AC": p.is_ac,
+                })
+            pd.DataFrame(rows).to_excel(writer, sheet_name="Link Profiles", index=False)
+
+        # Sheet 7: Arrival Sequence (if specified)
+        if report.station_arrivals:
+            rows = []
+            for e in report.station_arrivals:
+                rows.append({
+                    "Time": fmt_time(e.time),
+                    "Direction": e.direction,
+                    "Service": e.service_id,
+                    "Rakelink": e.rakelink,
+                    "AC": "Yes" if e.is_ac else "No",
+                    "Originally AC": "Yes" if e.originally_ac else "No",
+                })
+            pd.DataFrame(rows).to_excel(writer, sheet_name="Arrival Sequence", index=False)
+
+    buf.seek(0)
+    return buf

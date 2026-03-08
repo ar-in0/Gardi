@@ -406,6 +406,7 @@ class Simulator:
                 raise PreventUpdate
             self.gardi.parser.wtt.resetACStates()
             self.gardi.converted_links = []
+            self.gardi._cached_report = None
             rows, pinned_indices = self.gardi.build_rake_table()
             fig = self.gardi.generate_visualization(skip_ac_reset=True)
             return fig, rows, ""
@@ -434,13 +435,15 @@ class Simulator:
             Output("rake-3d-graph", "figure", allow_duplicate=True),
             Output("rake-link-table", "data", allow_duplicate=True),
             Output("status-div", "children", allow_duplicate=True),
+            Output("right-panel-content", "children", allow_duplicate=True),
             Input("convert-ac-button", "n_clicks"),
             State("rake-link-table", "selected_rows"),
             State("rake-link-table", "data"),
             State("rake-3d-graph", "figure"),
+            State("mode-details", "active"),
             prevent_initial_call=True,
         )
-        def handle_ac_conversion(n_clicks, selected_rows, table_data, current_fig):
+        def handle_ac_conversion(n_clicks, selected_rows, table_data, current_fig, details_active):
             if not n_clicks or not selected_rows or not table_data:
                 raise PreventUpdate
 
@@ -466,7 +469,10 @@ class Simulator:
                 dbc.Button("Download Report", id="download-report-btn", size="sm", color="link"),
             ])
 
-            return fig, updated_table, status_msg
+            # Refresh right panel if Query Info mode is active
+            panel_content = self.gardi.build_query_info_panel() if details_active else dash.no_update
+
+            return fig, updated_table, status_msg, panel_content
 
         @self.app.callback(
             Output("rake-link-table-container", "style"),
@@ -487,6 +493,28 @@ class Simulator:
                 return hidden, hidden, shown
             else:
                 return shown, hidden, hidden
+
+        @self.app.callback(
+            Output("export-rakelink-menu", "style"),
+            Output("export-rakelink-menu", "disabled"),
+            Output("export-service-menu", "style"),
+            Output("export-service-menu", "disabled"),
+            Output("export-station-menu", "style"),
+            Output("export-station-menu", "disabled"),
+            Input("filter-tabs", "active_tab"),
+            Input("graph-ready", "data"),
+        )
+        def toggle_export_menus(active_tab, graph_ready):
+            hidden = {"display": "none"}
+            shown = {"display": "inline-block"}
+            disabled = not graph_ready
+
+            if active_tab == "tab-service":
+                return hidden, True, shown, disabled, hidden, True
+            elif active_tab == "tab-station":
+                return hidden, True, hidden, True, shown, disabled
+            else:
+                return shown, disabled, hidden, True, hidden, True
 
         @self.app.callback(
             Output("rake-3d-graph", "figure", allow_duplicate=True),
@@ -903,7 +931,6 @@ class Simulator:
         @self.app.callback(
             Output("status-div", "children"),
             Output("rake-3d-graph", "figure"),
-            Output("export-button", "disabled"),
             Output("graph-ready", "data"),
             Output("clear-selections-button", "style"),
             Output("station-gap-table", "selected_rows", allow_duplicate=True),
@@ -932,7 +959,7 @@ class Simulator:
             }
 
             if n_clicks == 0 or wttContents is None or summaryContents is None:
-                return "", go.Figure(), True, False, clear_btn_hidden, []
+                return "", go.Figure(), False, clear_btn_hidden, []
 
             try:
                 self.gardi.query.ac = ac_status
@@ -942,12 +969,12 @@ class Simulator:
                 has_pinned = bool(self.gardi.query.pinnedLinks or self.gardi.query.pinnedServices)
                 btn_style = clear_btn_shown if has_pinned else clear_btn_hidden
 
-                return html.Div(), fig, False, True, btn_style, []
+                return html.Div(), fig, True, btn_style, []
 
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                return (html.Div(f"Error: {e}"), go.Figure(), True, False, clear_btn_hidden, [])
+                return (html.Div(f"Error: {e}"), go.Figure(), False, clear_btn_hidden, [])
 
         @self.app.callback(
             Output("distributions-collapse", "is_open"),
@@ -1019,9 +1046,90 @@ class Simulator:
         def trigger_replacement_download(n_clicks):
             if not n_clicks or not self.gardi.converted_links:
                 raise PreventUpdate
-            text = self.gardi.generate_replacement_report()
+            xlsx_buf = self.gardi.generate_replacement_xlsx()
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            return dcc.send_string(text, f"Replacement_Report_{timestamp}.txt")
+            return dcc.send_bytes(xlsx_buf.getvalue(), f"Replacement_Report_{timestamp}.xlsx")
+
+        # --- Per-view CSV exports ---
+
+        @self.app.callback(
+            Output("download-csv-generic", "data"),
+            Input("export-all-services-item", "n_clicks"),
+            prevent_initial_call=True,
+        )
+        def trigger_all_services_download(n_clicks):
+            if not n_clicks:
+                raise PreventUpdate
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            csv_string = self.gardi.export_all_services_csv()
+            return dcc.send_string(csv_string, f"All_Services_{timestamp}.csv")
+
+        @self.app.callback(
+            Output("download-csv-generic", "data", allow_duplicate=True),
+            Input("export-turnaround-item", "n_clicks"),
+            prevent_initial_call=True,
+        )
+        def trigger_turnaround_download(n_clicks):
+            if not n_clicks:
+                raise PreventUpdate
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            csv_string = self.gardi.export_turnaround_csv()
+            return dcc.send_string(csv_string, f"Turnaround_Times_{timestamp}.csv")
+
+        @self.app.callback(
+            Output("download-csv-generic", "data", allow_duplicate=True),
+            Input("export-timing-split-item", "n_clicks"),
+            prevent_initial_call=True,
+        )
+        def trigger_timing_split_download(n_clicks):
+            if not n_clicks:
+                raise PreventUpdate
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            csv_string = self.gardi.export_timing_split_csv()
+            return dcc.send_string(csv_string, f"Timing_Split_{timestamp}.csv")
+
+        @self.app.callback(
+            Output("download-csv-generic", "data", allow_duplicate=True),
+            Input("export-traversal-item", "n_clicks"),
+            prevent_initial_call=True,
+        )
+        def trigger_traversal_download(n_clicks):
+            if not n_clicks:
+                raise PreventUpdate
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            csv_string = self.gardi.export_traversal_csv()
+            return dcc.send_string(csv_string, f"Traversal_Times_{timestamp}.csv")
+
+        # --- Phase 4: AC headway chart update callback ---
+
+        @self.app.callback(
+            Output("ac-headway-chart", "figure"),
+            Input("ac-headway-station-dropdown", "value"),
+            prevent_initial_call=True,
+        )
+        def update_headway_chart(station_idx):
+            if station_idx is None or not self.gardi.converted_links:
+                raise PreventUpdate
+            report = self.gardi._get_replacement_report()
+            if not report.headwayGaps or station_idx >= len(report.headwayGaps):
+                raise PreventUpdate
+
+            entry = report.headwayGaps[station_idx]
+            gap_fig = go.Figure(go.Bar(
+                x=list(range(len(entry["gaps"]))),
+                y=entry["gaps"],
+                marker_color=["#ef4444" if g >= 15 else "#3b82f6" for g in entry["gaps"]],
+            ))
+            gap_fig.add_hline(y=15, line_dash="dash", line_color="#94a3b8",
+                              annotation_text="15 min threshold")
+            gap_fig.update_layout(
+                height=200, margin=dict(l=40, r=20, t=10, b=30),
+                paper_bgcolor="white", plot_bgcolor="white",
+                xaxis_title="Gap #", yaxis_title="Minutes",
+                font=dict(size=11),
+                title=f"{entry['station']} ({entry['direction']})",
+            )
+            return gap_fig
 
     def run(self, host, port):
         self.app.run(debug=self.debug, host=host, port=port)
