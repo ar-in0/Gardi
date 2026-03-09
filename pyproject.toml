@@ -2,7 +2,7 @@
 name = "gardi"
 version = "1.0.0"
 description = "Railway Timetable Visualization+Analysis"
-authors = [{name = "Armaan Chowfin", email = "rmhspace@gmail.com"}]
+authors = [{name = "Armaan Chowfin", email = "ar-in06@proton.me"}]
 dynamic = ["dependencies"]
 
 [tool.setuptools.dynamic]
