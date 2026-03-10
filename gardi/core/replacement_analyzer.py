@@ -366,13 +366,17 @@ class ReplacementAnalyzer:
         """
         def _compute_gaps(arrivals_list):
             gaps = []
-            gap_starts = []  # time at which each gap opens (last AC arrival before the gap)
+            gap_starts = []        # arrival time of the AC train that opens the gap
+            gap_rakelinkinfo = []  # rakelink of the AC train that closes the gap (arrivals_list[i+1])
+            gap_serviceinfo = []   # service_id of the AC train that closes the gap
             for i in range(len(arrivals_list) - 1):
                 gap = arrivals_list[i + 1].time - arrivals_list[i].time
                 if gap > 0:
                     gaps.append(round(gap, 1))
                     gap_starts.append(round(arrivals_list[i].time, 1))
-            return gaps, gap_starts
+                    gap_rakelinkinfo.append(arrivals_list[i + 1].rakelink)
+                    gap_serviceinfo.append(arrivals_list[i + 1].service_id)
+            return gaps, gap_starts, gap_rakelinkinfo, gap_serviceinfo
 
         results = []
         for (station, direction), arrivals in by_station.items():
@@ -384,8 +388,8 @@ class ReplacementAnalyzer:
             if len(ac_after) < 2:
                 continue
 
-            gaps_after,  gap_starts_after  = _compute_gaps(ac_after)
-            gaps_before, gap_starts_before = _compute_gaps(ac_before) if len(ac_before) >= 2 else ([], [])
+            gaps_after,  gap_starts_after,  gap_rl_after,  gap_svc_after  = _compute_gaps(ac_after)
+            gaps_before, gap_starts_before, gap_rl_before, gap_svc_before = _compute_gaps(ac_before) if len(ac_before) >= 2 else ([], [], [], [])
 
             if not gaps_after:
                 continue
@@ -404,7 +408,9 @@ class ReplacementAnalyzer:
                                 non_ac_brackets[k] = {
                                     "time": round(non_ac_arrivals[k].time, 1),
                                     "gap": round(gap, 1),
-                                    "is_converted": non_ac_arrivals[k].is_ac
+                                    "is_converted": non_ac_arrivals[k].is_ac,
+                                    "rakelink": non_ac_arrivals[k].rakelink,
+                                    "service_id": non_ac_arrivals[k].service_id,
                                 }
 
             brackets_list = [non_ac_brackets[k] for k in sorted(non_ac_brackets.keys())]
@@ -428,8 +434,10 @@ class ReplacementAnalyzer:
                     if has_converted_between:
                         brackets_after_list.append({
                             "time": round(a.time, 1),
-                            "prev_time": round(prev.time, 1), # NEW: Store the start of the gap
+                            "prev_time": round(prev.time, 1),
                             "gap": gap,
+                            "rakelink": a.rakelink,
+                            "service_id": a.service_id,
                         })
 
             results.append({
@@ -437,8 +445,12 @@ class ReplacementAnalyzer:
                 "direction": direction,
                 "gaps": gaps_after,
                 "gap_starts": gap_starts_after,
+                "gap_rakelinkinfo": gap_rl_after,
+                "gap_serviceinfo": gap_svc_after,
                 "gaps_before": gaps_before,
                 "gap_starts_before": gap_starts_before,
+                "gap_rakelinkinfo_before": gap_rl_before,
+                "gap_serviceinfo_before": gap_svc_before,
                 "non_ac_brackets_before": brackets_list,
                 "non_ac_brackets_after": brackets_after_list,
                 "maxGap": max(gaps_after),

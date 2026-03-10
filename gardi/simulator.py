@@ -1117,11 +1117,15 @@ class Simulator:
             if not report.headwayGaps or station_idx >= len(report.headwayGaps):
                 raise PreventUpdate
 
-            entry         = report.headwayGaps[station_idx]
-            gaps_after    = entry.get("gaps", [])
-            starts_after  = entry.get("gap_starts", [])
-            gaps_before   = entry.get("gaps_before", [])
-            starts_before = entry.get("gap_starts_before", [])
+            entry             = report.headwayGaps[station_idx]
+            gaps_after        = entry.get("gaps", [])
+            starts_after      = entry.get("gap_starts", [])
+            rl_after          = entry.get("gap_rakelinkinfo", ["?"] * len(gaps_after))
+            svc_after         = entry.get("gap_serviceinfo", ["?"] * len(gaps_after))
+            gaps_before       = entry.get("gaps_before", [])
+            starts_before     = entry.get("gap_starts_before", [])
+            rl_before         = entry.get("gap_rakelinkinfo_before", ["?"] * len(gaps_before))
+            svc_before        = entry.get("gap_serviceinfo_before", ["?"] * len(gaps_before))
 
             def _fmt_time(minutes):
                 h, m = divmod(int(minutes), 60)
@@ -1152,8 +1156,7 @@ class Simulator:
 
             BAR_WIDTH = 2  # fixed bar width in minutes
 
-            # x = arrival time of the AC train that ends the gap (start + gap = next AC arrival)
-            # y = headway gap experienced by that arrival since the previous AC train
+            # --- Before: AC bars (primary y) ---
             if gaps_before and starts_before:
                 x_before = [s + g for s, g in zip(starts_before, gaps_before)]
                 gap_fig.add_trace(go.Bar(
@@ -1162,20 +1165,28 @@ class Simulator:
                     width=BAR_WIDTH,
                     marker_color="#3b82f6",
                     showlegend=False,
-                    hovertemplate="%{customdata[0]}<br>Gap from prev: %{y} min<extra></extra>",
-                    customdata=[[_fmt_time(x)] for x in x_before],
+                    hovertemplate=(
+                        "%{customdata[0]}<br>"
+                        "Rakelink: %{customdata[1]}<br>"
+                        "Service: %{customdata[2]}<br>"
+                        "Gap from prev: %{y} min<extra></extra>"
+                    ),
+                    customdata=[[_fmt_time(x), rl, svc] for x, rl, svc in zip(x_before, rl_before, svc_before)],
                 ), row=1, col=1, secondary_y=False)
             else:
                 gap_fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=1, col=1, secondary_y=False)
 
+            # --- Before: non-AC bracket bars (secondary y) ---
             brackets = entry.get("non_ac_brackets_before", [])
             if brackets:
                 bx = [b["time"] for b in brackets]
                 by = [b["gap"] for b in brackets]
                 bcolors = ["#000000" if b["is_converted"] else "#94a3b8" for b in brackets]
                 bhover = ["(Converted to AC)" if b["is_converted"] else "Non-AC" for b in brackets]
-                customdata = [[_fmt_time(t), h] for t, h in zip(bx, bhover)]
-
+                customdata = [
+                    [_fmt_time(b["time"]), h, b.get("rakelink", "?"), b.get("service_id", "?")]
+                    for b, h in zip(brackets, bhover)
+                ]
                 gap_fig.add_trace(go.Bar(
                     x=bx,
                     y=by,
@@ -1183,11 +1194,17 @@ class Simulator:
                     marker_color=bcolors,
                     opacity=1.0,
                     showlegend=False,
-                    hovertemplate="%{customdata[0]}<br>%{customdata[1]}<br>Gap from prev: %{y} min<extra></extra>",
+                    hovertemplate=(
+                        "%{customdata[0]}<br>"
+                        "%{customdata[1]}<br>"
+                        "Rakelink: %{customdata[2]}<br>"
+                        "Service: %{customdata[3]}<br>"
+                        "Gap from prev: %{y} min<extra></extra>"
+                    ),
                     customdata=customdata,
                 ), row=1, col=1, secondary_y=True)
 
-
+            # --- After: AC bars (primary y) ---
             if gaps_after and starts_after:
                 x_after = [s + g for s, g in zip(starts_after, gaps_after)]
                 gap_fig.add_trace(go.Bar(
@@ -1196,19 +1213,27 @@ class Simulator:
                     width=BAR_WIDTH,
                     marker_color="#3b82f6",
                     showlegend=False,
-                    hovertemplate="%{customdata[0]}<br>Gap from prev: %{y} min<extra></extra>",
-                    customdata=[[_fmt_time(x)] for x in x_after],
+                    hovertemplate=(
+                        "%{customdata[0]}<br>"
+                        "Rakelink: %{customdata[1]}<br>"
+                        "Service: %{customdata[2]}<br>"
+                        "Gap from prev: %{y} min<extra></extra>"
+                    ),
+                    customdata=[[_fmt_time(x), rl, svc] for x, rl, svc in zip(x_after, rl_after, svc_after)],
                 ), row=2, col=1, secondary_y=False)
             else:
                 gap_fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=2, col=1, secondary_y=False)
 
+            # --- After: non-AC bracket bars (secondary y) ---
             brackets_after = entry.get("non_ac_brackets_after", [])
             if brackets_after:
-                bx_after = [b["time"] for b in brackets_after]
-                by_after = [b["gap"] for b in brackets_after]
+                bx_after    = [b["time"] for b in brackets_after]
+                by_after    = [b["gap"] for b in brackets_after]
                 bprev_after = [b.get("prev_time", t - b["gap"]) for b, t in zip(brackets_after, bx_after)]
-                customdata_after = [[_fmt_time(t)] for t in bx_after]
-
+                customdata_after = [
+                    [_fmt_time(b["time"]), b.get("rakelink", "?"), b.get("service_id", "?")]
+                    for b in brackets_after
+                ]
                 gap_fig.add_trace(go.Bar(
                     x=bx_after,
                     y=by_after,
@@ -1216,7 +1241,13 @@ class Simulator:
                     marker_color="#94a3b8",
                     opacity=1.0,
                     showlegend=False,
-                    hovertemplate="%{customdata[0]}<br>Non-AC (gap widened by conversion)<br>Gap from prev: %{y} min<extra></extra>",
+                    hovertemplate=(
+                        "%{customdata[0]}<br>"
+                        "Non-AC (gap widened by conversion)<br>"
+                        "Rakelink: %{customdata[1]}<br>"
+                        "Service: %{customdata[2]}<br>"
+                        "Gap from prev: %{y} min<extra></extra>"
+                    ),
                     customdata=customdata_after,
                 ), row=2, col=1, secondary_y=True)
 
