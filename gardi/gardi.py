@@ -409,16 +409,24 @@ class Gardi:
             def make_z(data):
                 return [[data[s].get(b, 0) for b in buckets] for s in stations]
 
+            z_before = make_z(density["before"])
+            z_after  = make_z(density["after"])
+            all_vals = [v for row in z_before + z_after for v in row]
+            zmin_shared = min(all_vals, default=0)
+            zmax_shared = max(all_vals, default=1)
+
             fig = make_subplots(rows=1, cols=2, subplot_titles=["Before", "After"],
                                 horizontal_spacing=0.08)
             fig.add_trace(go.Heatmap(
-                z=make_z(density["before"]), x=buckets, y=stations,
+                z=z_before, x=buckets, y=stations,
                 colorscale="Blues", showscale=False,
+                zmin=zmin_shared, zmax=zmax_shared,
             ), row=1, col=1)
             fig.add_trace(go.Heatmap(
-                z=make_z(density["after"]), x=buckets, y=stations,
+                z=z_after, x=buckets, y=stations,
                 colorscale="Blues", showscale=True,
                 colorbar=dict(title="Services", len=0.8),
+                zmin=zmin_shared, zmax=zmax_shared,
             ), row=1, col=2)
             fig.update_layout(
                 height=max(200, len(stations) * 18 + 60),
@@ -435,28 +443,73 @@ class Gardi:
                           style={"width": "100%"}),
             ], className="mb-3"))
 
-        # 3. AC headway gaps bar chart
+        # 3. AC headway gaps bar chart (before | after side-by-side)
         if report.headwayGaps:
             gap_stations = [f"{e['station']} ({e['direction']})" for e in report.headwayGaps]
 
-            # Build a dropdown + chart for the worst-gap station
             options = [{"label": s, "value": i} for i, s in enumerate(gap_stations)]
 
-            # Default chart: worst station
-            entry = report.headwayGaps[0]
-            gap_fig = go.Figure(go.Bar(
-                x=list(range(len(entry["gaps"]))),
-                y=entry["gaps"],
-                marker_color=["#ef4444" if g >= 15 else "#3b82f6" for g in entry["gaps"]],
-            ))
-            gap_fig.add_hline(y=15, line_dash="dash", line_color="#94a3b8",
-                              annotation_text="15 min threshold")
-            gap_fig.update_layout(
-                height=200, margin=dict(l=40, r=20, t=10, b=30),
-                paper_bgcolor="white", plot_bgcolor="white",
-                xaxis_title="Gap #", yaxis_title="Minutes",
-                font=dict(size=11),
-            )
+            def build_headway_fig(entry):
+                gaps_after  = entry.get("gaps", [])
+                gaps_before = entry.get("gaps_before", [])
+                threshold   = 15
+
+                # Pad the shorter list so both subplots share a comparable x-axis length
+                n = max(len(gaps_before), len(gaps_after), 1)
+
+                fig = make_subplots(
+                    rows=1, cols=2,
+                    subplot_titles=["Before", "After"],
+                    horizontal_spacing=0.08,
+                )
+
+                # Before panel
+                if gaps_before:
+                    fig.add_trace(go.Bar(
+                        x=list(range(len(gaps_before))),
+                        y=gaps_before,
+                        marker_color=["#3b82f6"
+                                      for g in gaps_before],
+                        showlegend=False,
+                    ), row=1, col=1)
+                else:
+                    # No before-AC data: show an empty placeholder
+                    fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=1, col=1)
+
+                # After panel
+                fig.add_trace(go.Bar(
+                    x=list(range(len(gaps_after))),
+                    y=gaps_after,
+                    marker_color=["#3b82f6"
+                                  for g in gaps_after],
+                    showlegend=False,
+                ), row=1, col=2)
+
+                # # Shared threshold lines on both panels
+                # for col in (1, 2):
+                #     fig.add_hline(
+                #         y=threshold, line_dash="dash", line_color="#94a3b8",
+                #         annotation_text="15 min threshold" if col == 2 else "",
+                #         row=1, col=col,
+                #     )
+
+                # Shared y-axis range so bars are visually comparable
+                all_gaps = gaps_before + gaps_after
+                ymax = max(all_gaps, default=threshold) * 1.15
+                fig.update_yaxes(range=[0, ymax],dtick=20)
+
+                fig.update_layout(
+                    height=220,
+                    margin=dict(l=40, r=20, t=30, b=30),
+                    paper_bgcolor="white", plot_bgcolor="white",
+                    font=dict(size=11),
+                )
+                fig.update_xaxes(title_text="Gap #")
+                fig.update_yaxes(title_text="Minutes", col=1)
+
+                return fig
+
+            gap_fig = build_headway_fig(report.headwayGaps[0])
 
             graph_children.append(html.Div([
                 html.Div("AC Headway Gaps", style={

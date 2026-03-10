@@ -264,6 +264,7 @@ def turnaround(wtt, station):
             if turn_mins < 0:
                 turn_mins += 1440
             rows.append({
+                "serviceID": svc.serviceId[0],
                 "arrivalTime": _fmt(second_last.atTime),
                 "turnaroundMins": round(turn_mins),
             })

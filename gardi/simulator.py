@@ -5,6 +5,7 @@ import dash
 import io
 import base64
 import plotly.graph_objs as go
+from plotly.subplots import make_subplots
 
 from dash import dcc, html, dash_table, Input, Output, State, callback_context
 from dash.exceptions import PreventUpdate
@@ -1117,20 +1118,59 @@ class Simulator:
                 raise PreventUpdate
 
             entry = report.headwayGaps[station_idx]
-            gap_fig = go.Figure(go.Bar(
-                x=list(range(len(entry["gaps"]))),
-                y=entry["gaps"],
-                marker_color=["#ef4444" if g >= 15 else "#3b82f6" for g in entry["gaps"]],
-            ))
-            gap_fig.add_hline(y=15, line_dash="dash", line_color="#94a3b8",
-                              annotation_text="15 min threshold")
-            gap_fig.update_layout(
-                height=200, margin=dict(l=40, r=20, t=10, b=30),
-                paper_bgcolor="white", plot_bgcolor="white",
-                xaxis_title="Gap #", yaxis_title="Minutes",
-                font=dict(size=11),
-                title=f"{entry['station']} ({entry['direction']})",
+            gaps_after  = entry.get("gaps", [])
+            gaps_before = entry.get("gaps_before", [])
+            threshold   = 15
+
+            gap_fig = make_subplots(
+                rows=1, cols=2,
+                subplot_titles=["Before", "After"],
+                horizontal_spacing=0.08,
             )
+
+            if gaps_before:
+                gap_fig.add_trace(go.Bar(
+                    x=list(range(len(gaps_before))),
+                    y=gaps_before,
+                    marker_color=["#3b82f6"
+                                  for g in gaps_before],
+                    showlegend=False,
+                ), row=1, col=1)
+            else:
+                gap_fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=1, col=1)
+
+            gap_fig.add_trace(go.Bar(
+                x=list(range(len(gaps_after))),
+                y=gaps_after,
+                marker_color=["#3b82f6"
+                              for g in gaps_after],
+                showlegend=False,
+            ), row=1, col=2)
+
+            # for col in (1, 2):
+            #     gap_fig.add_hline(
+            #         y=threshold, line_dash="dash", line_color="#94a3b8",
+            #         annotation_text="15 min threshold" if col == 2 else "",
+            #         row=1, col=col,
+            #     )
+
+            all_gaps = gaps_before + gaps_after
+            ymax = max(all_gaps, default=threshold) * 1.15
+            gap_fig.update_yaxes(range=[0, ymax], dtick=20)
+
+            gap_fig.update_layout(
+                height=220,
+                margin=dict(l=40, r=20, t=30, b=30),
+                paper_bgcolor="white", plot_bgcolor="white",
+                font=dict(size=11),
+                title=dict(
+                    text=f"{entry['station']} ({entry['direction']})",
+                    font=dict(size=12), x=0.5,
+                ),
+            )
+            gap_fig.update_xaxes(title_text="Gap #")
+            gap_fig.update_yaxes(title_text="Minutes", col=1)
+
             return gap_fig
 
     def run(self, host, port):

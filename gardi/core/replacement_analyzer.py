@@ -61,6 +61,8 @@ class ReplacementReport:
     beforeAfterMetrics: dict = None   # before/after AC service metrics
     headwayGaps: list = None          # AC headway gaps by station
     acDensityByTod: dict = None       # AC density by time-of-day
+    maxAcDensityByStation: dict = None  # max possible AC services/hour per station (all links converted)
+    maxAcDensityGlobal: int = 1         # global max ac service density across all stations
 
 
 class ReplacementAnalyzer:
@@ -135,7 +137,7 @@ class ReplacementAnalyzer:
             sid = str(svc.serviceId[0]) if svc.serviceId else "?"
             rakelink = self.svc_to_link.get(sid, "?")
 
-            originally_ac = svc.needsACRake and (rakelink not in replacement_set)
+            originally_ac = svc.needsACRake and rakelink not in replacement_set
             is_ac = originally_ac or (rakelink in replacement_set)
             seen_stations = set()
             for evt in svc.events:
@@ -362,35 +364,45 @@ class ReplacementAnalyzer:
         Returns list of {"station", "direction", "gaps", "maxGap", "meanGap", "count"}
         sorted by worst gap descending.
         """
-        results = []
-        for (station, direction), arrivals in by_station.items():
-            ac_arrivals = [a for a in arrivals if a.is_ac]
-            if len(ac_arrivals) < 2:
-                continue
-
+        def _compute_gaps(arrivals_list):
             gaps = []
-            for i in range(len(ac_arrivals) - 1):
-                gap = ac_arrivals[i + 1].time - ac_arrivals[i].time
+            for i in range(len(arrivals_list) - 1):
+                gap = arrivals_list[i + 1].time - arrivals_list[i].time
                 if gap > 0:
                     gaps.append(round(gap, 1))
+            return gaps
 
-            if not gaps:
+        results = []
+        for (station, direction), arrivals in by_station.items():
+            # After: current state (includes newly-converted AC)
+            ac_after = [a for a in arrivals if a.is_ac]
+            # Before: original state (only originally-AC services)
+            ac_before = [a for a in arrivals if a.originally_ac]
+
+            if len(ac_after) < 2:
+                continue
+
+            gaps_after = _compute_gaps(ac_after)
+            gaps_before = _compute_gaps(ac_before) if len(ac_before) >= 2 else []
+
+            if not gaps_after:
                 continue
 
             results.append({
                 "station": station,
                 "direction": direction,
-                "gaps": gaps,
-                "maxGap": max(gaps),
-                "meanGap": round(sum(gaps) / len(gaps), 1),
-                "count": len(gaps),
-                "exceedances": sum(1 for g in gaps if g >= thresholdMinutes),
+                "gaps": gaps_after,           # after conversion
+                "gaps_before": gaps_before,   # before conversion
+                "maxGap": max(gaps_after),
+                "meanGap": round(sum(gaps_after) / len(gaps_after), 1),
+                "count": len(gaps_after),
+                "exceedances": sum(1 for g in gaps_after if g >= thresholdMinutes),
             })
 
         results.sort(key=lambda r: -r["maxGap"])
         return results
 
-    def computeACDensityByTimeOfDay(self, by_station, replacement_set, bucketMinutes=60):
+    def computeACDensityByTimeOfDay(self, by_station, replacement_set, bucketMinutes=60, allAC=False):
         """Compute station x time-bucket matrix of AC service counts.
 
         Returns {"stations", "buckets", "before", "after"} where before/after are
@@ -416,7 +428,7 @@ class ReplacementAnalyzer:
                 bl = bucket_labels[bucket_idx]
                 if a.originally_ac:
                     before[station][bl] += 1
-                if a.is_ac:
+                if a.is_ac or allAC:
                     after[station][bl] += 1
 
         return {
@@ -457,6 +469,14 @@ class ReplacementAnalyzer:
         headway_gaps = self.computeACHeadwayGaps(by_station, replacement_set)
         density = self.computeACDensityByTimeOfDay(by_station, replacement_set)
 
+        density_all_ac = self.computeACDensityByTimeOfDay(by_station, replacement_set, allAC=True)
+        max_by_station = {
+            s: max(density_all_ac["after"][s].values(), default=0)
+            for s in density_all_ac["stations"]
+        }
+
+        global_max = max(max_by_station.values(), default=1)
+
         report = ReplacementReport(
             replacement_set=replacement_set,
             depot=depot,
@@ -467,6 +487,8 @@ class ReplacementAnalyzer:
             beforeAfterMetrics=before_after,
             headwayGaps=headway_gaps,
             acDensityByTod=density,
+            maxAcDensityByStation=max_by_station,
+            maxAcDensityGlobal=global_max,
         )
 
         if station:
