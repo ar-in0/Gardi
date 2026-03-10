@@ -390,6 +390,48 @@ class ReplacementAnalyzer:
             if not gaps_after:
                 continue
 
+            non_ac_arrivals = [a for a in arrivals if not a.originally_ac]
+            non_ac_brackets = {}
+            converted_indices = [i for i, a in enumerate(non_ac_arrivals) if a.is_ac]
+
+            for idx in converted_indices:
+                for k in range(idx - 1, idx + 2):
+                    if 0 <= k < len(non_ac_arrivals):
+                        if k not in non_ac_brackets:
+                            prev_time = non_ac_arrivals[k - 1].time if k > 0 else non_ac_arrivals[k].time
+                            gap = non_ac_arrivals[k].time - prev_time
+                            if gap >= 0:
+                                non_ac_brackets[k] = {
+                                    "time": round(non_ac_arrivals[k].time, 1),
+                                    "gap": round(gap, 1),
+                                    "is_converted": non_ac_arrivals[k].is_ac
+                                }
+
+            brackets_list = [non_ac_brackets[k] for k in sorted(non_ac_brackets.keys())]
+
+            # After-state non-AC interarrival times.
+            # Converted trains are gone from the non-AC sequence; show only the trains
+            # immediately following a converted one, their gap visibly widened.
+            non_ac_after = [a for a in arrivals if not a.is_ac]  # truly non-AC post-conversion
+            brackets_after_list = []
+            for idx, a in enumerate(non_ac_after):
+                prev = non_ac_after[idx - 1] if idx > 0 else None
+                if prev:
+                    gap = round(a.time - prev.time, 1)
+                    # Include only trains whose gap was widened by a conversion
+                    has_converted_between = any(
+                        c.is_ac and not c.originally_ac
+                        and (c.time > prev.time)
+                        and c.time < a.time
+                        for c in arrivals
+                    )
+                    if has_converted_between:
+                        brackets_after_list.append({
+                            "time": round(a.time, 1),
+                            "prev_time": round(prev.time, 1), # NEW: Store the start of the gap
+                            "gap": gap,
+                        })
+
             results.append({
                 "station": station,
                 "direction": direction,
@@ -397,6 +439,8 @@ class ReplacementAnalyzer:
                 "gap_starts": gap_starts_after,
                 "gaps_before": gaps_before,
                 "gap_starts_before": gap_starts_before,
+                "non_ac_brackets_before": brackets_list,
+                "non_ac_brackets_after": brackets_after_list,
                 "maxGap": max(gaps_after),
                 "meanGap": round(sum(gaps_after) / len(gaps_after), 1),
                 "count": len(gaps_after),

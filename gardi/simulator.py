@@ -1147,6 +1147,7 @@ class Simulator:
                 subplot_titles=["Before", "After"],
                 shared_xaxes=True,
                 vertical_spacing=0.14,
+                specs=[[{"secondary_y": True}], [{"secondary_y": True}]]
             )
 
             BAR_WIDTH = 2  # fixed bar width in minutes
@@ -1163,9 +1164,29 @@ class Simulator:
                     showlegend=False,
                     hovertemplate="%{customdata[0]}<br>Gap from prev: %{y} min<extra></extra>",
                     customdata=[[_fmt_time(x)] for x in x_before],
-                ), row=1, col=1)
+                ), row=1, col=1, secondary_y=False)
             else:
-                gap_fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=1, col=1)
+                gap_fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=1, col=1, secondary_y=False)
+
+            brackets = entry.get("non_ac_brackets_before", [])
+            if brackets:
+                bx = [b["time"] for b in brackets]
+                by = [b["gap"] for b in brackets]
+                bcolors = ["#000000" if b["is_converted"] else "#94a3b8" for b in brackets]
+                bhover = ["(Converted to AC)" if b["is_converted"] else "Non-AC" for b in brackets]
+                customdata = [[_fmt_time(t), h] for t, h in zip(bx, bhover)]
+
+                gap_fig.add_trace(go.Bar(
+                    x=bx,
+                    y=by,
+                    width=BAR_WIDTH,
+                    marker_color=bcolors,
+                    opacity=1.0,
+                    showlegend=False,
+                    hovertemplate="%{customdata[0]}<br>%{customdata[1]}<br>Gap from prev: %{y} min<extra></extra>",
+                    customdata=customdata,
+                ), row=1, col=1, secondary_y=True)
+
 
             if gaps_after and starts_after:
                 x_after = [s + g for s, g in zip(starts_after, gaps_after)]
@@ -1177,10 +1198,37 @@ class Simulator:
                     showlegend=False,
                     hovertemplate="%{customdata[0]}<br>Gap from prev: %{y} min<extra></extra>",
                     customdata=[[_fmt_time(x)] for x in x_after],
-                ), row=2, col=1)
+                ), row=2, col=1, secondary_y=False)
             else:
-                gap_fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=2, col=1)
+                gap_fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=2, col=1, secondary_y=False)
 
+            brackets_after = entry.get("non_ac_brackets_after", [])
+            if brackets_after:
+                bx_after = [b["time"] for b in brackets_after]
+                by_after = [b["gap"] for b in brackets_after]
+                bprev_after = [b.get("prev_time", t - b["gap"]) for b, t in zip(brackets_after, bx_after)]
+                customdata_after = [[_fmt_time(t)] for t in bx_after]
+
+                gap_fig.add_trace(go.Bar(
+                    x=bx_after,
+                    y=by_after,
+                    width=BAR_WIDTH,
+                    marker_color="#94a3b8",
+                    opacity=1.0,
+                    showlegend=False,
+                    hovertemplate="%{customdata[0]}<br>Non-AC (gap widened by conversion)<br>Gap from prev: %{y} min<extra></extra>",
+                    customdata=customdata_after,
+                ), row=2, col=1, secondary_y=True)
+
+                for t, p, g in zip(bx_after, bprev_after, by_after):
+                    gap_fig.add_shape(
+                        type="line",
+                        x0=p, x1=t,
+                        y0=g, y1=g,
+                        line=dict(color="#94a3b8", width=1, dash="dot"),
+                        row=2, col=1,
+                        secondary_y=True
+                    )
             gap_fig.update_xaxes(
                 range=[x_min, x_max],
                 tickvals=tick_vals, ticktext=tick_text,
@@ -1188,12 +1236,26 @@ class Simulator:
             )
             gap_fig.update_yaxes(
                 range=[0, ymax], dtick=20, tick0=0,
-                title_text="Minutes",
+                title_text="Minutes", title_font=dict(color="#3b82f6"),
+                tickfont=dict(color="#3b82f6"),
                 showgrid=True, gridcolor="#e2e8f0",
+                secondary_y=False,
+            )
+            gap_fig.update_yaxes(
+                # range=[0, ymax], dtick=20, tick0=0,
+                title_text="Non-AC Gap (min)", title_font=dict(color="#94a3b8"),
+                tickfont=dict(color="#94a3b8"),
+                showgrid=False,
+                secondary_y=True, row=1, col=1
+            )
+            gap_fig.update_yaxes(
+                # range=[0, ymax], dtick=20, tick0=0,  # Match the Y1 scaling
+                showgrid=False,
+                secondary_y=True, row=2, col=1
             )
             gap_fig.update_xaxes(title_text="Time of day", row=2, col=1)
             gap_fig.update_layout(
-                height=340,
+                height=560,
                 margin=dict(l=50, r=20, t=40, b=40),
                 paper_bgcolor="white", plot_bgcolor="white",
                 font=dict(size=11),
