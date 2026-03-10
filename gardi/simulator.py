@@ -1260,6 +1260,46 @@ class Simulator:
                         row=2, col=1,
                         secondary_y=True
                     )
+
+                # --- After: predecessor non-AC bars (secondary y) ---
+                # For each widened bar, also render the preceding non-AC event (at prev_time)
+                # so the dotted line has a visible anchor bar. Look up from non_ac_brackets_before.
+                before_brackets_by_time = {b["time"]: b for b in brackets}
+                seen_pred_times = set()
+                # Exclude times already rendered as widened bars so there's no overlap
+                widened_times = set(bx_after)
+                pred_bx, pred_by, pred_cd = [], [], []
+                for b in brackets_after:
+                    pt = b.get("prev_time")
+                    if pt is None or pt in seen_pred_times or pt in widened_times:
+                        continue
+                    pred_entry = before_brackets_by_time.get(pt)
+                    if pred_entry:
+                        seen_pred_times.add(pt)
+                        pred_bx.append(pred_entry["time"])
+                        pred_by.append(pred_entry["gap"])
+                        pred_cd.append([
+                            _fmt_time(pred_entry["time"]),
+                            pred_entry.get("rakelink", "?"),
+                            pred_entry.get("service_id", "?"),
+                        ])
+                if pred_bx:
+                    gap_fig.add_trace(go.Bar(
+                        x=pred_bx,
+                        y=pred_by,
+                        width=BAR_WIDTH,
+                        marker_color="#475569",
+                        opacity=0.75,
+                        showlegend=False,
+                        hovertemplate=(
+                            "%{customdata[0]}<br>"
+                            "Non-AC (preceding event)<br>"
+                            "Rakelink: %{customdata[1]}<br>"
+                            "Service: %{customdata[2]}<br>"
+                            "Gap from prev: %{y} min<extra></extra>"
+                        ),
+                        customdata=pred_cd,
+                    ), row=2, col=1, secondary_y=True)
             gap_fig.update_xaxes(
                 range=[x_min, x_max],
                 tickvals=tick_vals, ticktext=tick_text,
