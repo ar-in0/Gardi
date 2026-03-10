@@ -524,7 +524,7 @@ class Gardi:
                 )
                 fig.update_xaxes(title_text="Time of day", row=2, col=1)
                 fig.update_layout(
-                    height=340,
+                    height=480,
                     margin=dict(l=50, r=20, t=40, b=40),
                     paper_bgcolor="white", plot_bgcolor="white",
                     font=dict(size=11),
@@ -535,7 +535,7 @@ class Gardi:
             gap_fig = build_headway_fig(report.headwayGaps[0])
 
             graph_children.append(html.Div([
-                html.Div("AC Headway Gaps", style={
+                html.Div("Change in AC/Non-AC Wait Times", style={
                     "fontSize": "13px", "fontWeight": "600", "color": "#475569", "marginBottom": "4px",
                 }),
                 dcc.Dropdown(
