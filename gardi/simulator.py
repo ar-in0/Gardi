@@ -1117,61 +1117,94 @@ class Simulator:
             if not report.headwayGaps or station_idx >= len(report.headwayGaps):
                 raise PreventUpdate
 
-            entry = report.headwayGaps[station_idx]
-            gaps_after  = entry.get("gaps", [])
-            gaps_before = entry.get("gaps_before", [])
-            threshold   = 15
+            entry         = report.headwayGaps[station_idx]
+            gaps_after    = entry.get("gaps", [])
+            starts_after  = entry.get("gap_starts", [])
+            gaps_before   = entry.get("gaps_before", [])
+            starts_before = entry.get("gap_starts_before", [])
+
+            def _fmt_time(minutes):
+                h, m = divmod(int(minutes), 60)
+                return f"{h:02d}:{m:02d}"
+
+            all_starts = starts_before + starts_after
+            all_ends   = [s + g for s, g in zip(starts_before + starts_after,
+                                                 gaps_before   + gaps_after)]
+            if all_starts:
+                x_min = max(0,    min(all_starts) - 30)
+                x_max = min(1440, max(all_ends)   + 30)
+            else:
+                x_min, x_max = 165, 1605
+
+            all_gaps = gaps_before + gaps_after
+            ymax = max(all_gaps, default=30) * 1.15
+
+            tick_vals = list(range(int(x_min // 60) * 60, int(x_max) + 60, 60))
+            tick_text = [_fmt_time(v) for v in tick_vals]
 
             gap_fig = make_subplots(
-                rows=1, cols=2,
+                rows=2, cols=1,
                 subplot_titles=["Before", "After"],
-                horizontal_spacing=0.08,
+                shared_xaxes=True,
+                vertical_spacing=0.14,
             )
 
-            if gaps_before:
+            BAR_WIDTH = 2  # fixed bar width in minutes
+
+            # x = arrival time of the AC train that ends the gap (start + gap = next AC arrival)
+            # y = headway gap experienced by that arrival since the previous AC train
+            if gaps_before and starts_before:
+                x_before = [s + g for s, g in zip(starts_before, gaps_before)]
                 gap_fig.add_trace(go.Bar(
-                    x=list(range(len(gaps_before))),
+                    x=x_before,
                     y=gaps_before,
-                    marker_color=["#3b82f6"
-                                  for g in gaps_before],
+                    width=BAR_WIDTH,
+                    marker_color="#3b82f6",
                     showlegend=False,
+                    hovertemplate="%{customdata[0]}<br>Gap from prev: %{y} min<extra></extra>",
+                    customdata=[[_fmt_time(x)] for x in x_before],
                 ), row=1, col=1)
             else:
                 gap_fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=1, col=1)
 
-            gap_fig.add_trace(go.Bar(
-                x=list(range(len(gaps_after))),
-                y=gaps_after,
-                marker_color=["#3b82f6"
-                              for g in gaps_after],
-                showlegend=False,
-            ), row=1, col=2)
+            if gaps_after and starts_after:
+                x_after = [s + g for s, g in zip(starts_after, gaps_after)]
+                gap_fig.add_trace(go.Bar(
+                    x=x_after,
+                    y=gaps_after,
+                    width=BAR_WIDTH,
+                    marker_color="#3b82f6",
+                    showlegend=False,
+                    hovertemplate="%{customdata[0]}<br>Gap from prev: %{y} min<extra></extra>",
+                    customdata=[[_fmt_time(x)] for x in x_after],
+                ), row=2, col=1)
+            else:
+                gap_fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=2, col=1)
 
-            # for col in (1, 2):
-            #     gap_fig.add_hline(
-            #         y=threshold, line_dash="dash", line_color="#94a3b8",
-            #         annotation_text="15 min threshold" if col == 2 else "",
-            #         row=1, col=col,
-            #     )
-
-            all_gaps = gaps_before + gaps_after
-            ymax = max(all_gaps, default=threshold) * 1.15
-            gap_fig.update_yaxes(range=[0, ymax], dtick=20)
-
+            gap_fig.update_xaxes(
+                range=[x_min, x_max],
+                tickvals=tick_vals, ticktext=tick_text,
+                showgrid=True, gridcolor="#e2e8f0",
+            )
+            gap_fig.update_yaxes(
+                range=[0, ymax], dtick=20, tick0=0,
+                title_text="Minutes",
+                showgrid=True, gridcolor="#e2e8f0",
+            )
+            gap_fig.update_xaxes(title_text="Time of day", row=2, col=1)
             gap_fig.update_layout(
-                height=220,
-                margin=dict(l=40, r=20, t=30, b=30),
+                height=340,
+                margin=dict(l=50, r=20, t=40, b=40),
                 paper_bgcolor="white", plot_bgcolor="white",
                 font=dict(size=11),
+                bargap=0,
                 title=dict(
                     text=f"{entry['station']} ({entry['direction']})",
                     font=dict(size=12), x=0.5,
                 ),
             )
-            gap_fig.update_xaxes(title_text="Gap #")
-            gap_fig.update_yaxes(title_text="Minutes", col=1)
-
             return gap_fig
+
 
     def run(self, host, port):
         self.app.run(debug=self.debug, host=host, port=port)

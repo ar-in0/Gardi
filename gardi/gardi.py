@@ -443,70 +443,93 @@ class Gardi:
                           style={"width": "100%"}),
             ], className="mb-3"))
 
-        # 3. AC headway gaps bar chart (before | after side-by-side)
+        # 3. AC headway gaps chart (before / after stacked, x = time of day)
         if report.headwayGaps:
             gap_stations = [f"{e['station']} ({e['direction']})" for e in report.headwayGaps]
-
             options = [{"label": s, "value": i} for i, s in enumerate(gap_stations)]
 
-            def build_headway_fig(entry):
-                gaps_after  = entry.get("gaps", [])
-                gaps_before = entry.get("gaps_before", [])
-                threshold   = 15
+            def _fmt_time(minutes):
+                h, m = divmod(int(minutes), 60)
+                return f"{h:02d}:{m:02d}"
 
-                # Pad the shorter list so both subplots share a comparable x-axis length
-                n = max(len(gaps_before), len(gaps_after), 1)
+            def build_headway_fig(entry):
+                gaps_after    = entry.get("gaps", [])
+                starts_after  = entry.get("gap_starts", [])
+                gaps_before   = entry.get("gaps_before", [])
+                starts_before = entry.get("gap_starts_before", [])
+
+                all_starts = starts_before + starts_after
+                all_ends   = [s + g for s, g in zip(starts_before + starts_after,
+                                                     gaps_before   + gaps_after)]
+                if all_starts:
+                    x_min = max(0,    min(all_starts) - 30)
+                    x_max = min(1440, max(all_ends)   + 30)
+                else:
+                    x_min, x_max = 165, 1605
+
+                all_gaps = gaps_before + gaps_after
+                ymax = max(all_gaps, default=30) * 1.15
+
+                tick_vals = list(range(int(x_min // 60) * 60, int(x_max) + 60, 60))
+                tick_text = [_fmt_time(v) for v in tick_vals]
 
                 fig = make_subplots(
-                    rows=1, cols=2,
+                    rows=2, cols=1,
                     subplot_titles=["Before", "After"],
-                    horizontal_spacing=0.08,
+                    shared_xaxes=True,
+                    vertical_spacing=0.14,
                 )
 
-                # Before panel
-                if gaps_before:
+                BAR_WIDTH = 2  # fixed bar width in minutes
+
+                # x = arrival time of the AC train that ends the gap (start + gap = next AC arrival)
+                # y = headway gap experienced by that arrival since the previous AC train
+                if gaps_before and starts_before:
+                    x_before = [s + g for s, g in zip(starts_before, gaps_before)]
                     fig.add_trace(go.Bar(
-                        x=list(range(len(gaps_before))),
+                        x=x_before,
                         y=gaps_before,
-                        marker_color=["#3b82f6"
-                                      for g in gaps_before],
+                        width=BAR_WIDTH,
+                        marker_color="#3b82f6",
                         showlegend=False,
+                        hovertemplate="%{customdata[0]}<br>Gap from prev: %{y} min<extra></extra>",
+                        customdata=[[_fmt_time(x)] for x in x_before],
                     ), row=1, col=1)
                 else:
-                    # No before-AC data: show an empty placeholder
                     fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=1, col=1)
 
-                # After panel
-                fig.add_trace(go.Bar(
-                    x=list(range(len(gaps_after))),
-                    y=gaps_after,
-                    marker_color=["#3b82f6"
-                                  for g in gaps_after],
-                    showlegend=False,
-                ), row=1, col=2)
+                if gaps_after and starts_after:
+                    x_after = [s + g for s, g in zip(starts_after, gaps_after)]
+                    fig.add_trace(go.Bar(
+                        x=x_after,
+                        y=gaps_after,
+                        width=BAR_WIDTH,
+                        marker_color="#3b82f6",
+                        showlegend=False,
+                        hovertemplate="%{customdata[0]}<br>Gap from prev: %{y} min<extra></extra>",
+                        customdata=[[_fmt_time(x)] for x in x_after],
+                    ), row=2, col=1)
+                else:
+                    fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=2, col=1)
 
-                # # Shared threshold lines on both panels
-                # for col in (1, 2):
-                #     fig.add_hline(
-                #         y=threshold, line_dash="dash", line_color="#94a3b8",
-                #         annotation_text="15 min threshold" if col == 2 else "",
-                #         row=1, col=col,
-                #     )
-
-                # Shared y-axis range so bars are visually comparable
-                all_gaps = gaps_before + gaps_after
-                ymax = max(all_gaps, default=threshold) * 1.15
-                fig.update_yaxes(range=[0, ymax],dtick=20)
-
+                fig.update_xaxes(
+                    range=[x_min, x_max],
+                    tickvals=tick_vals, ticktext=tick_text,
+                    showgrid=True, gridcolor="#e2e8f0",
+                )
+                fig.update_yaxes(
+                    range=[0, ymax], dtick=20, tick0=0,
+                    title_text="Minutes",
+                    showgrid=True, gridcolor="#e2e8f0",
+                )
+                fig.update_xaxes(title_text="Time of day", row=2, col=1)
                 fig.update_layout(
-                    height=220,
-                    margin=dict(l=40, r=20, t=30, b=30),
+                    height=340,
+                    margin=dict(l=50, r=20, t=40, b=40),
                     paper_bgcolor="white", plot_bgcolor="white",
                     font=dict(size=11),
+                    bargap=0,
                 )
-                fig.update_xaxes(title_text="Gap #")
-                fig.update_yaxes(title_text="Minutes", col=1)
-
                 return fig
 
             gap_fig = build_headway_fig(report.headwayGaps[0])

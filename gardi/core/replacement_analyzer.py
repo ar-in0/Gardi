@@ -366,11 +366,13 @@ class ReplacementAnalyzer:
         """
         def _compute_gaps(arrivals_list):
             gaps = []
+            gap_starts = []  # time at which each gap opens (last AC arrival before the gap)
             for i in range(len(arrivals_list) - 1):
                 gap = arrivals_list[i + 1].time - arrivals_list[i].time
                 if gap > 0:
                     gaps.append(round(gap, 1))
-            return gaps
+                    gap_starts.append(round(arrivals_list[i].time, 1))
+            return gaps, gap_starts
 
         results = []
         for (station, direction), arrivals in by_station.items():
@@ -382,8 +384,8 @@ class ReplacementAnalyzer:
             if len(ac_after) < 2:
                 continue
 
-            gaps_after = _compute_gaps(ac_after)
-            gaps_before = _compute_gaps(ac_before) if len(ac_before) >= 2 else []
+            gaps_after,  gap_starts_after  = _compute_gaps(ac_after)
+            gaps_before, gap_starts_before = _compute_gaps(ac_before) if len(ac_before) >= 2 else ([], [])
 
             if not gaps_after:
                 continue
@@ -391,8 +393,10 @@ class ReplacementAnalyzer:
             results.append({
                 "station": station,
                 "direction": direction,
-                "gaps": gaps_after,           # after conversion
-                "gaps_before": gaps_before,   # before conversion
+                "gaps": gaps_after,
+                "gap_starts": gap_starts_after,
+                "gaps_before": gaps_before,
+                "gap_starts_before": gap_starts_before,
                 "maxGap": max(gaps_after),
                 "meanGap": round(sum(gaps_after) / len(gaps_after), 1),
                 "count": len(gaps_after),
