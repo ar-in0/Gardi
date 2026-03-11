@@ -254,17 +254,14 @@ class ReplacementAnalyzer:
         }
 
     def followings_matrix(self, replacement_set, edges):
-        """Followings matrix scoped to replacement set + their neighbors."""
         rset = set(replacement_set)
 
-        neighbors = set()
+        # Always use ALL nodes, not just rset + neighbors
+        all_nodes = set()
         for (link_a, link_b) in edges:
-            if link_a in rset:
-                neighbors.add(link_b)
-            if link_b in rset:
-                neighbors.add(link_a)
-
-        nodes = sorted(rset | neighbors)
+            all_nodes.add(link_a)
+            all_nodes.add(link_b)
+        nodes = sorted(all_nodes)  # full graph always
 
         node_set = set(nodes)
         filtered_edges = {}
@@ -272,6 +269,7 @@ class ReplacementAnalyzer:
             if link_a in node_set and link_b in node_set:
                 filtered_edges[(link_a, link_b)] = weight
 
+        # ac_links: links that are already AC OR are being converted
         ac_links = set()
         for name in nodes:
             p = self.profiles.get(name)

@@ -546,8 +546,15 @@ class Gardi:
                     style={"fontSize": "12px", "marginBottom": "4px"},
                 ),
                 dcc.Graph(id="ac-headway-chart", figure=gap_fig,
-                          config={"displayModeBar": False},
-                          style={"width": "100%"}),
+                        config={
+                            "displayModeBar": True,
+                            "modeBarButtonsToRemove": [
+                                "zoom2d", "pan2d", "select2d", "lasso2d",
+                                "zoomIn2d", "zoomOut2d", "autoScale2d", "toImage",
+                            ],
+                            # Keeps only "resetAxes" (home icon) visible
+                        },
+                        style={"width": "100%"}),
             ], className="mb-3"))
 
         # 4. Followings adjacency heatmap

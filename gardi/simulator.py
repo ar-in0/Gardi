@@ -1142,6 +1142,15 @@ class Simulator:
 
             all_gaps = gaps_before + gaps_after
             ymax = max(all_gaps, default=30) * 1.15
+            all_gaps = gaps_before + gaps_after
+            ymax = max(all_gaps, default=30) * 1.15
+
+            # Shared y2 scale across both subplots so before/after are comparable
+            # and reset axes restores to the correct range
+            brackets_before_gaps = [b["gap"] for b in entry.get("non_ac_brackets_before", [])]
+            brackets_after_gaps  = [b["gap"] for b in entry.get("non_ac_brackets_after", [])]
+            all_nonac_gaps = brackets_before_gaps + brackets_after_gaps
+            y2max = max(all_nonac_gaps, default=30) * 1.15
 
             tick_vals = list(range(int(x_min // 60) * 60, int(x_max) + 60, 60))
             tick_text = [_fmt_time(v) for v in tick_vals]
@@ -1313,16 +1322,18 @@ class Simulator:
                 secondary_y=False,
             )
             gap_fig.update_yaxes(
-                # range=[0, ymax], dtick=20, tick0=0,
+                range=[0, y2max],
                 title_text="Non-AC Gap (min)", title_font=dict(color="#94a3b8"),
                 tickfont=dict(color="#94a3b8"),
                 showgrid=False,
                 secondary_y=True, row=1, col=1
             )
             gap_fig.update_yaxes(
-                # range=[0, ymax], dtick=20, tick0=0,  # Match the Y1 scaling
+                range=[0, y2max],
+                title_text="Non-AC Gap (min)", title_font=dict(color="#94a3b8"),
+                tickfont=dict(color="#94a3b8"),
                 showgrid=False,
-                secondary_y=True, row=2, col=1
+                secondary_y=True, row=1, col=1
             )
             gap_fig.update_xaxes(title_text="Time of day", row=2, col=1)
             gap_fig.update_layout(
