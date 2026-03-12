@@ -1333,7 +1333,7 @@ class Simulator:
                 title_text="Non-AC Gap (min)", title_font=dict(color="#94a3b8"),
                 tickfont=dict(color="#94a3b8"),
                 showgrid=False,
-                secondary_y=True, row=1, col=1
+                secondary_y=True, row=2, col=1
             )
             gap_fig.update_xaxes(title_text="Time of day", row=2, col=1)
             gap_fig.update_layout(
