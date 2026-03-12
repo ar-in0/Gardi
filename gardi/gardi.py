@@ -5,7 +5,7 @@ import dash_bootstrap_components as dbc
 
 from gardi.core.parser import TimeTableParser
 from gardi.core.filters import FilterType, FilterQuery, FilterEngine
-from gardi.core.graph_builder import GraphBuilder
+from gardi.core.graph_builder import GraphBuilder, StationWaitTimesChart, ACDensityChart, LinkFollowingsChart
 from gardi.core.data_builder import DataBuilder, fmt_time, make_summary_card
 from gardi.core.rake_operations import RakeOperations
 from gardi.core.csv_builder import CsvBuilder
@@ -40,6 +40,11 @@ class Gardi:
         self.data_builder = DataBuilder()
         self.rake_ops = RakeOperations()
         self.csv_builder = CsvBuilder()
+
+        # chart builders
+        self.wait_times_chart      = StationWaitTimesChart()
+        self.ac_density_chart      = ACDensityChart()
+        self.link_followings_chart = LinkFollowingsChart()
 
     def initialize_parser(self, wtt_file_obj):
         """Parse WTT, register stations, return station options."""
@@ -372,9 +377,6 @@ class Gardi:
 
     def _buildACAnalysisChildren(self):
         """Return (summary_card_children, graph_children) lists."""
-        import plotly.graph_objs as go
-        from plotly.subplots import make_subplots
-
         report = self._get_replacement_report()
         summary_children = []
         graph_children = []
@@ -400,143 +402,31 @@ class Gardi:
                 ], className="g-2 mb-3")
             )
 
-        # 2. AC density heatmap (before | after side-by-side)
+        # 2. AC service density heatmap
         if report.acDensityByTod:
-            density = report.acDensityByTod
-            stations = density["stations"]
-            buckets = density["buckets"]
-
-            def make_z(data):
-                return [[data[s].get(b, 0) for b in buckets] for s in stations]
-
-            z_before = make_z(density["before"])
-            z_after  = make_z(density["after"])
-            all_vals = [v for row in z_before + z_after for v in row]
-            zmin_shared = min(all_vals, default=0)
-            zmax_shared = max(all_vals, default=1)
-
-            fig = make_subplots(rows=1, cols=2, subplot_titles=["Before", "After"],
-                                horizontal_spacing=0.08)
-            fig.add_trace(go.Heatmap(
-                z=z_before, x=buckets, y=stations,
-                colorscale="Blues", showscale=False,
-                zmin=zmin_shared, zmax=zmax_shared,
-            ), row=1, col=1)
-            fig.add_trace(go.Heatmap(
-                z=z_after, x=buckets, y=stations,
-                colorscale="Blues", showscale=True,
-                colorbar=dict(title="Services", len=0.8),
-                zmin=zmin_shared, zmax=zmax_shared,
-            ), row=1, col=2)
-            fig.update_layout(
-                height=max(200, len(stations) * 18 + 60),
-                margin=dict(l=100, r=40, t=30, b=30),
-                paper_bgcolor="white", plot_bgcolor="white",
-                font=dict(size=11),
-            )
+            fig = self.ac_density_chart.build(report.acDensityByTod)
             graph_children.append(html.Div([
                 html.Div("AC Service Density by Hour", style={
-                    "fontSize": "13px", "fontWeight": "600", "color": "#475569", "marginBottom": "4px",
+                    "fontSize": "13px", "fontWeight": "600",
+                    "color": "#475569", "marginBottom": "4px",
                 }),
                 dcc.Graph(id="ac-density-chart", figure=fig,
                           config={"displayModeBar": False},
                           style={"width": "100%"}),
             ], className="mb-3"))
 
-        # 3. AC headway gaps chart (before / after stacked, x = time of day)
+        # 3. Station wait times chart (before/after AC gap comparison)
         if report.headwayGaps:
-            gap_stations = [f"{e['station']} ({e['direction']})" for e in report.headwayGaps]
-            options = [{"label": s, "value": i} for i, s in enumerate(gap_stations)]
-
-            def _fmt_time(minutes):
-                h, m = divmod(int(minutes), 60)
-                return f"{h:02d}:{m:02d}"
-
-            def build_headway_fig(entry):
-                gaps_after    = entry.get("gaps", [])
-                starts_after  = entry.get("gap_starts", [])
-                gaps_before   = entry.get("gaps_before", [])
-                starts_before = entry.get("gap_starts_before", [])
-
-                all_starts = starts_before + starts_after
-                all_ends   = [s + g for s, g in zip(starts_before + starts_after,
-                                                     gaps_before   + gaps_after)]
-                if all_starts:
-                    x_min = max(0,    min(all_starts) - 30)
-                    x_max = min(1440, max(all_ends)   + 30)
-                else:
-                    x_min, x_max = 165, 1605
-
-                all_gaps = gaps_before + gaps_after
-                ymax = max(all_gaps, default=30) * 1.15
-
-                tick_vals = list(range(int(x_min // 60) * 60, int(x_max) + 60, 60))
-                tick_text = [_fmt_time(v) for v in tick_vals]
-
-                fig = make_subplots(
-                    rows=2, cols=1,
-                    subplot_titles=["Before", "After"],
-                    shared_xaxes=True,
-                    vertical_spacing=0.14,
-                )
-
-                BAR_WIDTH = 2  # fixed bar width in minutes
-
-                # x = arrival time of the AC train that ends the gap (start + gap = next AC arrival)
-                # y = headway gap experienced by that arrival since the previous AC train
-                if gaps_before and starts_before:
-                    x_before = [s + g for s, g in zip(starts_before, gaps_before)]
-                    fig.add_trace(go.Bar(
-                        x=x_before,
-                        y=gaps_before,
-                        width=BAR_WIDTH,
-                        marker_color="#3b82f6",
-                        showlegend=False,
-                        hovertemplate="%{customdata[0]}<br>Gap from prev: %{y} min<extra></extra>",
-                        customdata=[[_fmt_time(x)] for x in x_before],
-                    ), row=1, col=1)
-                else:
-                    fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=1, col=1)
-
-                if gaps_after and starts_after:
-                    x_after = [s + g for s, g in zip(starts_after, gaps_after)]
-                    fig.add_trace(go.Bar(
-                        x=x_after,
-                        y=gaps_after,
-                        width=BAR_WIDTH,
-                        marker_color="#3b82f6",
-                        showlegend=False,
-                        hovertemplate="%{customdata[0]}<br>Gap from prev: %{y} min<extra></extra>",
-                        customdata=[[_fmt_time(x)] for x in x_after],
-                    ), row=2, col=1)
-                else:
-                    fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=2, col=1)
-
-                fig.update_xaxes(
-                    range=[x_min, x_max],
-                    tickvals=tick_vals, ticktext=tick_text,
-                    showgrid=True, gridcolor="#e2e8f0",
-                )
-                fig.update_yaxes(
-                    range=[0, ymax], dtick=20, tick0=0,
-                    title_text="Minutes",
-                    showgrid=True, gridcolor="#e2e8f0",
-                )
-                fig.update_xaxes(title_text="Time of day", row=2, col=1)
-                fig.update_layout(
-                    height=480,
-                    margin=dict(l=50, r=20, t=40, b=40),
-                    paper_bgcolor="white", plot_bgcolor="white",
-                    font=dict(size=11),
-                    bargap=0,
-                )
-                return fig
-
-            gap_fig = build_headway_fig(report.headwayGaps[0])
+            gap_stations = [
+                f"{e['station']} ({e['direction']})" for e in report.headwayGaps
+            ]
+            options  = [{"label": s, "value": i} for i, s in enumerate(gap_stations)]
+            init_fig = self.wait_times_chart.build(report.headwayGaps[0])
 
             graph_children.append(html.Div([
                 html.Div("Change in AC/Non-AC Wait Times", style={
-                    "fontSize": "13px", "fontWeight": "600", "color": "#475569", "marginBottom": "4px",
+                    "fontSize": "13px", "fontWeight": "600",
+                    "color": "#475569", "marginBottom": "4px",
                 }),
                 dcc.Dropdown(
                     id="ac-headway-station-dropdown",
@@ -545,59 +435,30 @@ class Gardi:
                     clearable=False,
                     style={"fontSize": "12px", "marginBottom": "4px"},
                 ),
-                dcc.Graph(id="ac-headway-chart", figure=gap_fig,
-                        config={
-                            "displayModeBar": True,
-                            "modeBarButtonsToRemove": [
-                                "zoom2d", "pan2d", "select2d", "lasso2d",
-                                "zoomIn2d", "zoomOut2d", "autoScale2d", "toImage",
-                            ],
-                            # Keeps only "resetAxes" (home icon) visible
-                        },
-                        style={"width": "100%"}),
+                dcc.Graph(
+                    id="ac-headway-chart",
+                    figure=init_fig,
+                    config={
+                        "displayModeBar": True,
+                        "modeBarButtonsToRemove": [
+                            "zoom2d", "pan2d", "select2d", "lasso2d",
+                            "zoomIn2d", "zoomOut2d", "autoScale2d", "toImage",
+                        ],
+                    },
+                    style={"width": "100%"},
+                ),
             ], className="mb-3"))
 
-        # 4. Followings adjacency heatmap
+        # 4. Link followings adjacency heatmap
         fol = report.followings
         if fol and fol["nodes"] and fol["matrix"]:
-            nodes = fol["nodes"]
-            ac_pair_set = set(tuple(p) for p in fol.get("ac_ac_pairs", []))
-            z = []
-            annotations = []
-            for i, row_node in enumerate(nodes):
-                row_vals = []
-                for j, col_node in enumerate(nodes):
-                    if i == j:
-                        row_vals.append(0)
-                    else:
-                        pair = tuple(sorted([row_node, col_node]))
-                        w = fol["matrix"].get(pair, 0)
-                        row_vals.append(w)
-                        if pair in ac_pair_set and w > 0:
-                            annotations.append(dict(
-                                x=j, y=i, text="*", showarrow=False,
-                                font=dict(color="red", size=10),
-                            ))
-                z.append(row_vals)
-
-            fol_fig = go.Figure(go.Heatmap(
-                z=z, x=nodes, y=nodes,
-                colorscale="Viridis", showscale=True,
-                colorbar=dict(title="Weight", len=0.8),
-            ))
-            fol_fig.update_layout(
-                height=max(250, len(nodes) * 22 + 60),
-                margin=dict(l=80, r=40, t=10, b=60),
-                paper_bgcolor="white", plot_bgcolor="white",
-                font=dict(size=10),
-                annotations=annotations,
-                xaxis=dict(tickangle=-45),
-            )
+            fig = self.link_followings_chart.build(fol)
             graph_children.append(html.Div([
                 html.Div("Link Followings (* = AC-AC pair)", style={
-                    "fontSize": "13px", "fontWeight": "600", "color": "#475569", "marginBottom": "4px",
+                    "fontSize": "13px", "fontWeight": "600",
+                    "color": "#475569", "marginBottom": "4px",
                 }),
-                dcc.Graph(id="ac-followings-chart", figure=fol_fig,
+                dcc.Graph(id="ac-followings-chart", figure=fig,
                           config={"displayModeBar": False},
                           style={"width": "100%"}),
             ], className="mb-3"))

@@ -5,7 +5,6 @@ import dash
 import io
 import base64
 import plotly.graph_objs as go
-from plotly.subplots import make_subplots
 
 from dash import dcc, html, dash_table, Input, Output, State, callback_context
 from dash.exceptions import PreventUpdate
@@ -70,6 +69,20 @@ def _render_distribution_grid(dist_data, stations=None):
 
 
 class Simulator:
+    _BTN_HIDDEN = {"display": "none"}
+    _BTN_SHOWN = {
+        "display": "block",
+        "marginTop": "8px",
+        "width": "100%",
+        "height": "32px",
+        "border": "1px solid #e2e8f0",
+        "borderRadius": "6px",
+        "fontSize": "12px",
+        "color": "#64748b",
+        "backgroundColor": "white",
+        "cursor": "pointer",
+    }
+
     def __init__(self, debug=False):
         assets_dir = os.path.join(os.path.dirname(__file__), "assets")
         self.app = dash.Dash(
@@ -536,20 +549,6 @@ class Simulator:
             ):
                 raise PreventUpdate
 
-            clear_btn_hidden = {"display": "none"}
-            clear_btn_shown = {
-                "display": "block",
-                "marginTop": "8px",
-                "width": "100%",
-                "height": "32px",
-                "border": "1px solid #e2e8f0",
-                "borderRadius": "6px",
-                "fontSize": "12px",
-                "color": "#64748b",
-                "backgroundColor": "white",
-                "cursor": "pointer",
-            }
-
             if not selected_rows or not table_data:
                 selected_services = []
             else:
@@ -566,7 +565,7 @@ class Simulator:
             self.gardi.query.pinnedServices = [s for s in self.gardi.query.pinnedServices if s in selected_set]
             self.gardi.query.selectedServices = selected_services
 
-            # Smart highlight: only dim if non-pinned rows are selected
+            #  only dim if non-pinned rows are selected
             newly_selected = selected_set - pinned
             fig = go.Figure(current_fig)
             if newly_selected:
@@ -574,7 +573,7 @@ class Simulator:
             else:
                 self.gardi.highlight_services(fig, [])  # all full opacity
 
-            btn_style = clear_btn_shown if selected_rows else clear_btn_hidden
+            btn_style = self._BTN_SHOWN if selected_rows else self._BTN_HIDDEN
 
             return fig, btn_style
 
@@ -632,20 +631,6 @@ class Simulator:
             if current_fig is None or not current_fig.get("data"):
                 raise PreventUpdate
 
-            clear_btn_hidden = {"display": "none"}
-            clear_btn_shown = {
-                "display": "block",
-                "marginTop": "8px",
-                "width": "100%",
-                "height": "32px",
-                "border": "1px solid #e2e8f0",
-                "borderRadius": "6px",
-                "fontSize": "12px",
-                "color": "#64748b",
-                "backgroundColor": "white",
-                "cursor": "pointer",
-            }
-
             if not selected_rows or not table_data:
                 selected_links = []
             else:
@@ -662,7 +647,7 @@ class Simulator:
             self.gardi.query.pinnedLinks = [l for l in self.gardi.query.pinnedLinks if l in selected_set]
             self.gardi.query.selectedLinks = selected_links
 
-            # Smart highlight: only dim if non-pinned rows are selected
+            # only dim if non-pinned rows are selected
             newly_selected = selected_set - pinned
             fig = go.Figure(current_fig)
             if newly_selected:
@@ -670,7 +655,7 @@ class Simulator:
             else:
                 self.gardi.highlight_links(fig, [])  # all full opacity
 
-            btn_style = clear_btn_shown if selected_rows else clear_btn_hidden
+            btn_style = self._BTN_SHOWN if selected_rows else self._BTN_HIDDEN
 
             return fig, btn_style
 
@@ -936,31 +921,16 @@ class Simulator:
             Output("clear-selections-button", "style"),
             Output("station-gap-table", "selected_rows", allow_duplicate=True),
             Input("generate-button", "n_clicks"),
-            Input("rake-3d-graph", "clickData"),
             Input("ac-selector", "value"),
             State("upload-wtt-inline", "contents"),
             State("upload-summary-inline", "contents"),
             prevent_initial_call=True,
         )
         def on_generate_click(
-            n_clicks, clickData, ac_status, wttContents, summaryContents
+            n_clicks, ac_status, wttContents, summaryContents
         ):
-            clear_btn_hidden = {"display": "none"}
-            clear_btn_shown = {
-                "display": "block",
-                "marginTop": "8px",
-                "width": "100%",
-                "height": "32px",
-                "border": "1px solid #e2e8f0",
-                "borderRadius": "6px",
-                "fontSize": "12px",
-                "color": "#64748b",
-                "backgroundColor": "white",
-                "cursor": "pointer",
-            }
-
             if n_clicks == 0 or wttContents is None or summaryContents is None:
-                return "", go.Figure(), False, clear_btn_hidden, []
+                return "", go.Figure(), False, self._BTN_HIDDEN, []
 
             try:
                 self.gardi.query.ac = ac_status
@@ -970,14 +940,14 @@ class Simulator:
                     self.gardi.highlight_links(fig, self.gardi.converted_links)
 
                 has_pinned = bool(self.gardi.query.pinnedLinks or self.gardi.query.pinnedServices)
-                btn_style = clear_btn_shown if has_pinned else clear_btn_hidden
+                btn_style = self._BTN_SHOWN if has_pinned else self._BTN_HIDDEN
 
                 return html.Div(), fig, True, btn_style, []
 
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                return (html.Div(f"Error: {e}"), go.Figure(), False, clear_btn_hidden, [])
+                return (html.Div(f"Error: {e}"), go.Figure(), False, self._BTN_HIDDEN, [])
 
         @self.app.callback(
             Output("distributions-collapse", "is_open"),
@@ -1053,8 +1023,7 @@ class Simulator:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             return dcc.send_bytes(xlsx_buf.getvalue(), f"Replacement_Report_{timestamp}.xlsx")
 
-        # --- Per-view CSV exports ---
-
+        # csv exports per view
         @self.app.callback(
             Output("download-csv-generic", "data"),
             Input("export-all-services-item", "n_clicks"),
@@ -1103,7 +1072,6 @@ class Simulator:
             csv_string = self.gardi.export_traversal_csv()
             return dcc.send_string(csv_string, f"Traversal_Times_{timestamp}.csv")
 
-        # --- Phase 4: AC headway chart update callback ---
 
         @self.app.callback(
             Output("ac-headway-chart", "figure"),
@@ -1116,238 +1084,7 @@ class Simulator:
             report = self.gardi._get_replacement_report()
             if not report.headwayGaps or station_idx >= len(report.headwayGaps):
                 raise PreventUpdate
-
-            entry             = report.headwayGaps[station_idx]
-            gaps_after        = entry.get("gaps", [])
-            starts_after      = entry.get("gap_starts", [])
-            rl_after          = entry.get("gap_rakelinkinfo", ["?"] * len(gaps_after))
-            svc_after         = entry.get("gap_serviceinfo", ["?"] * len(gaps_after))
-            gaps_before       = entry.get("gaps_before", [])
-            starts_before     = entry.get("gap_starts_before", [])
-            rl_before         = entry.get("gap_rakelinkinfo_before", ["?"] * len(gaps_before))
-            svc_before        = entry.get("gap_serviceinfo_before", ["?"] * len(gaps_before))
-
-            def _fmt_time(minutes):
-                h, m = divmod(int(minutes), 60)
-                return f"{h:02d}:{m:02d}"
-
-            all_starts = starts_before + starts_after
-            all_ends   = [s + g for s, g in zip(starts_before + starts_after,
-                                                 gaps_before   + gaps_after)]
-            if all_starts:
-                x_min = max(0,    min(all_starts) - 30)
-                x_max = min(1440, max(all_ends)   + 30)
-            else:
-                x_min, x_max = 165, 1605
-
-            all_gaps = gaps_before + gaps_after
-            ymax = max(all_gaps, default=30) * 1.15
-            all_gaps = gaps_before + gaps_after
-            ymax = max(all_gaps, default=30) * 1.15
-
-            # Shared y2 scale across both subplots so before/after are comparable
-            # and reset axes restores to the correct range
-            brackets_before_gaps = [b["gap"] for b in entry.get("non_ac_brackets_before", [])]
-            brackets_after_gaps  = [b["gap"] for b in entry.get("non_ac_brackets_after", [])]
-            all_nonac_gaps = brackets_before_gaps + brackets_after_gaps
-            y2max = max(all_nonac_gaps, default=30) * 1.15
-
-            tick_vals = list(range(int(x_min // 60) * 60, int(x_max) + 60, 60))
-            tick_text = [_fmt_time(v) for v in tick_vals]
-
-            gap_fig = make_subplots(
-                rows=2, cols=1,
-                subplot_titles=["Before", "After"],
-                shared_xaxes=True,
-                vertical_spacing=0.14,
-                specs=[[{"secondary_y": True}], [{"secondary_y": True}]]
-            )
-
-            BAR_WIDTH = 2  # fixed bar width in minutes
-
-            # --- Before: AC bars (primary y) ---
-            if gaps_before and starts_before:
-                x_before = [s + g for s, g in zip(starts_before, gaps_before)]
-                gap_fig.add_trace(go.Bar(
-                    x=x_before,
-                    y=gaps_before,
-                    width=BAR_WIDTH,
-                    marker_color="#3b82f6",
-                    showlegend=False,
-                    hovertemplate=(
-                        "%{customdata[0]}<br>"
-                        "Rakelink: %{customdata[1]}<br>"
-                        "Service: %{customdata[2]}<br>"
-                        "Gap from prev: %{y} min<extra></extra>"
-                    ),
-                    customdata=[[_fmt_time(x), rl, svc] for x, rl, svc in zip(x_before, rl_before, svc_before)],
-                ), row=1, col=1, secondary_y=False)
-            else:
-                gap_fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=1, col=1, secondary_y=False)
-
-            # --- Before: non-AC bracket bars (secondary y) ---
-            brackets = entry.get("non_ac_brackets_before", [])
-            if brackets:
-                bx = [b["time"] for b in brackets]
-                by = [b["gap"] for b in brackets]
-                bcolors = ["#000000" if b["is_converted"] else "#94a3b8" for b in brackets]
-                bhover = ["(Converted to AC)" if b["is_converted"] else "Non-AC" for b in brackets]
-                customdata = [
-                    [_fmt_time(b["time"]), h, b.get("rakelink", "?"), b.get("service_id", "?")]
-                    for b, h in zip(brackets, bhover)
-                ]
-                gap_fig.add_trace(go.Bar(
-                    x=bx,
-                    y=by,
-                    width=BAR_WIDTH,
-                    marker_color=bcolors,
-                    opacity=1.0,
-                    showlegend=False,
-                    hovertemplate=(
-                        "%{customdata[0]}<br>"
-                        "%{customdata[1]}<br>"
-                        "Rakelink: %{customdata[2]}<br>"
-                        "Service: %{customdata[3]}<br>"
-                        "Gap from prev: %{y} min<extra></extra>"
-                    ),
-                    customdata=customdata,
-                ), row=1, col=1, secondary_y=True)
-
-            # --- After: AC bars (primary y) ---
-            if gaps_after and starts_after:
-                x_after = [s + g for s, g in zip(starts_after, gaps_after)]
-                gap_fig.add_trace(go.Bar(
-                    x=x_after,
-                    y=gaps_after,
-                    width=BAR_WIDTH,
-                    marker_color="#3b82f6",
-                    showlegend=False,
-                    hovertemplate=(
-                        "%{customdata[0]}<br>"
-                        "Rakelink: %{customdata[1]}<br>"
-                        "Service: %{customdata[2]}<br>"
-                        "Gap from prev: %{y} min<extra></extra>"
-                    ),
-                    customdata=[[_fmt_time(x), rl, svc] for x, rl, svc in zip(x_after, rl_after, svc_after)],
-                ), row=2, col=1, secondary_y=False)
-            else:
-                gap_fig.add_trace(go.Bar(x=[], y=[], showlegend=False), row=2, col=1, secondary_y=False)
-
-            # --- After: non-AC bracket bars (secondary y) ---
-            brackets_after = entry.get("non_ac_brackets_after", [])
-            if brackets_after:
-                bx_after    = [b["time"] for b in brackets_after]
-                by_after    = [b["gap"] for b in brackets_after]
-                bprev_after = [b.get("prev_time", t - b["gap"]) for b, t in zip(brackets_after, bx_after)]
-                customdata_after = [
-                    [_fmt_time(b["time"]), b.get("rakelink", "?"), b.get("service_id", "?")]
-                    for b in brackets_after
-                ]
-                gap_fig.add_trace(go.Bar(
-                    x=bx_after,
-                    y=by_after,
-                    width=BAR_WIDTH,
-                    marker_color="#94a3b8",
-                    opacity=1.0,
-                    showlegend=False,
-                    hovertemplate=(
-                        "%{customdata[0]}<br>"
-                        "Non-AC (gap widened by conversion)<br>"
-                        "Rakelink: %{customdata[1]}<br>"
-                        "Service: %{customdata[2]}<br>"
-                        "Gap from prev: %{y} min<extra></extra>"
-                    ),
-                    customdata=customdata_after,
-                ), row=2, col=1, secondary_y=True)
-
-                for t, p, g in zip(bx_after, bprev_after, by_after):
-                    gap_fig.add_shape(
-                        type="line",
-                        x0=p, x1=t,
-                        y0=g, y1=g,
-                        line=dict(color="#94a3b8", width=1, dash="dot"),
-                        row=2, col=1,
-                        secondary_y=True
-                    )
-
-                # --- After: predecessor non-AC bars (secondary y) ---
-                # For each widened bar, also render the preceding non-AC event (at prev_time)
-                # so the dotted line has a visible anchor bar. Look up from non_ac_brackets_before.
-                before_brackets_by_time = {b["time"]: b for b in brackets}
-                seen_pred_times = set()
-                # Exclude times already rendered as widened bars so there's no overlap
-                widened_times = set(bx_after)
-                pred_bx, pred_by, pred_cd = [], [], []
-                for b in brackets_after:
-                    pt = b.get("prev_time")
-                    if pt is None or pt in seen_pred_times or pt in widened_times:
-                        continue
-                    pred_entry = before_brackets_by_time.get(pt)
-                    if pred_entry:
-                        seen_pred_times.add(pt)
-                        pred_bx.append(pred_entry["time"])
-                        pred_by.append(pred_entry["gap"])
-                        pred_cd.append([
-                            _fmt_time(pred_entry["time"]),
-                            pred_entry.get("rakelink", "?"),
-                            pred_entry.get("service_id", "?"),
-                        ])
-                if pred_bx:
-                    gap_fig.add_trace(go.Bar(
-                        x=pred_bx,
-                        y=pred_by,
-                        width=BAR_WIDTH,
-                        marker_color="#475569",
-                        opacity=0.75,
-                        showlegend=False,
-                        hovertemplate=(
-                            "%{customdata[0]}<br>"
-                            "Non-AC (preceding event)<br>"
-                            "Rakelink: %{customdata[1]}<br>"
-                            "Service: %{customdata[2]}<br>"
-                            "Gap from prev: %{y} min<extra></extra>"
-                        ),
-                        customdata=pred_cd,
-                    ), row=2, col=1, secondary_y=True)
-            gap_fig.update_xaxes(
-                range=[x_min, x_max],
-                tickvals=tick_vals, ticktext=tick_text,
-                showgrid=True, gridcolor="#e2e8f0",
-            )
-            gap_fig.update_yaxes(
-                range=[0, ymax], dtick=20, tick0=0,
-                title_text="Minutes", title_font=dict(color="#3b82f6"),
-                tickfont=dict(color="#3b82f6"),
-                showgrid=True, gridcolor="#e2e8f0",
-                secondary_y=False,
-            )
-            gap_fig.update_yaxes(
-                range=[0, y2max],
-                title_text="Non-AC Gap (min)", title_font=dict(color="#94a3b8"),
-                tickfont=dict(color="#94a3b8"),
-                showgrid=False,
-                secondary_y=True, row=1, col=1
-            )
-            gap_fig.update_yaxes(
-                range=[0, y2max],
-                title_text="Non-AC Gap (min)", title_font=dict(color="#94a3b8"),
-                tickfont=dict(color="#94a3b8"),
-                showgrid=False,
-                secondary_y=True, row=2, col=1
-            )
-            gap_fig.update_xaxes(title_text="Time of day", row=2, col=1)
-            gap_fig.update_layout(
-                height=560,
-                margin=dict(l=50, r=20, t=40, b=40),
-                paper_bgcolor="white", plot_bgcolor="white",
-                font=dict(size=11),
-                bargap=0,
-                title=dict(
-                    text=f"{entry['station']} ({entry['direction']})",
-                    font=dict(size=12), x=0.5,
-                ),
-            )
-            return gap_fig
+            return self.gardi.wait_times_chart.build(report.headwayGaps[station_idx])
 
 
     def run(self, host, port):
