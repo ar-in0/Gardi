@@ -819,6 +819,8 @@ class StationWaitTimesChart:
             paper_bgcolor="white", plot_bgcolor="white",
             font=dict(size=11),
             bargap=0,
+            yaxis3=dict(matches="y"),
+            yaxis4=dict(matches="y2"),
             title=dict(
                 text=f"{entry['station']} ({entry['direction']})",
                 font=dict(size=12), x=0.5,
