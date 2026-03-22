@@ -1,0 +1,20 @@
+[project]
+name = "gardi"
+version = "1.0.0"
+description = "Railway Timetable Visualization+Analysis"
+authors = [{name = "Armaan Chowfin", email = "ar-in06@proton.me"}]
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[project.scripts]
+gardi = "gardi.__main__:main" # run from cli via `gardi`
+
+[tool.setuptools.packages.find]
+include = ["gardi*"]
+
+# for pip install
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
