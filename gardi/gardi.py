@@ -31,7 +31,6 @@ class Gardi:
         self.filterStates = {
             FilterType.RAKELINK: {},
             FilterType.SERVICE: {},
-            FilterType.STATION: {},
         }
 
         # engines
@@ -101,9 +100,6 @@ class Gardi:
         # Build figure
         fig = self.graph_builder.build_figure(self.parser.wtt, qq)
 
-        # Station mode post-processing
-        fig = self.graph_builder.post_process_station_mode(fig, qq, self.parser.wtt, self.parser)
-
         return fig
 
     def convert_to_ac(self, link_names):
@@ -141,24 +137,6 @@ class Gardi:
             self.parser.wtt, pinned_links=self.query.pinnedLinks
         )
 
-    def build_station_gap_summary(self):
-        return self.data_builder.build_station_gap_summary(self.parser, self.query)
-
-    def build_station_gap_detail(self, station_names):
-        return self.data_builder.build_station_gap_detail(self.parser, station_names)
-
-    def build_gap_distribution(self, detail_rows):
-        return self.data_builder.build_gap_distribution(detail_rows)
-
-    def build_all_station_distributions(self):
-        return self.data_builder.build_all_station_distributions(self.parser)
-
-    def reset_station_highlight(self, fig):
-        self.graph_builder.reset_station_highlight(fig)
-
-    def focus_event(self, fig, targets):
-        self.graph_builder.focus_event(fig, targets)
-
     def export_xlsx(self):
         return self.data_builder.export_to_xlsx(self.parser.wtt)
 
@@ -171,25 +149,20 @@ class Gardi:
     def highlight_links(self, fig, selected_links):
         self.graph_builder.highlight_links(fig, selected_links)
 
-    def highlight_stations(self, fig, station_names):
-        self.graph_builder.highlight_stations(fig, station_names)
-
     def highlight_services(self, fig, selected_services):
         self.graph_builder.highlight_services(fig, selected_services)
 
-    def update_query_field(self, ctx, field, value_rakelink, value_service=None, value_station=None):
+    def update_query_field(self, ctx, field, value_rakelink, value_service=None):
         if not ctx.triggered:
             return
         trigger = ctx.triggered[0]["prop_id"].split(".")[0]
 
         if trigger.endswith("_service"):
             setattr(self.query, field, value_service)
-        elif trigger.endswith("_station"):
-            setattr(self.query, field, value_station)
         else:
             setattr(self.query, field, value_rakelink)
 
-    def switch_filter_mode(self, active_tab, rk_time=None, svc_time=None, st_time=None):
+    def switch_filter_mode(self, active_tab, rk_time=None, svc_time=None):
         # save current
         if self.query.type:
             self.filterStates[self.query.type] = {
@@ -205,8 +178,6 @@ class Gardi:
             self.query.type = FilterType.RAKELINK
         elif active_tab == "tab-service":
             self.query.type = FilterType.SERVICE
-        elif active_tab == "tab-station":
-            self.query.type = FilterType.STATION
 
         # Restore saved state for new tab
         saved = self.filterStates.get(self.query.type, {})

@@ -10,7 +10,6 @@ from gardi.core.models import Line
 class FilterType(Enum):
     RAKELINK = "rakelink"
     SERVICE = "service"
-    STATION = "station"
 
 
 @dataclass
@@ -47,8 +46,6 @@ class FilterEngine:
     def apply_filters(self, wtt, qq):
         if qq.type == FilterType.SERVICE:
             self.apply_service_filters(wtt, qq)
-        elif qq.type == FilterType.STATION:
-            self.apply_station_filters(wtt, qq)
         else:
             self.apply_link_filters(wtt, qq)
 
@@ -179,35 +176,6 @@ class FilterEngine:
             [s for s in wtt.suburbanServices if s.render]
         )
         visible_cycles = len([r for r in wtt.rakecycles if r.render])
-
-    def apply_station_filters(self, wtt, qq):
-        t_lower, t_upper = qq.inTimePeriod
-        for rc in wtt.rakecycles:
-            rc.render = True
-
-        for svc in wtt.suburbanServices:
-            svc.render = True
-
-            # check if events exist before accessing
-            if not svc.events:
-                svc.render = False
-                continue
-
-            for ev in svc.events:
-                ev.render = True
-
-                # check if atTime exists
-                if ev.atTime is None:
-                    ev.render = False
-                    continue
-
-                t = ev.atTime
-                if not (t_lower <= t <= t_upper):
-                    ev.render = False
-
-            svc.checkACConstraint(qq)
-
-        self._apply_line_type_filter(wtt, qq)
 
     def _apply_line_type_filter(self, wtt, qq):
         """Filter services by line type (through/local/semi-fast)."""

@@ -102,10 +102,7 @@ class GraphBuilder:
                 if not rc.render and rc.linkName not in pinned_links:
                     continue
 
-                if query.type == FilterType.STATION:
-                    mode = "markers"
-                elif query.type == FilterType.RAKELINK:
-                    mode = "lines+markers"
+                mode = "lines+markers"
 
                 # enumerate rakelink events
                 x, y, z, stationLabels, svcIds = [], [], [], [], []
@@ -214,10 +211,7 @@ class GraphBuilder:
                     z_labels.append((z_offset, rc.linkName))
                     z_offset += 40
 
-        if query.inTimePeriod and (
-            query.type == FilterType.SERVICE
-            or query.type == FilterType.STATION
-        ):
+        if query.inTimePeriod and query.type == FilterType.SERVICE:
             x_start, x_end = query.inTimePeriod
             x_end += 90  # padding
         else:
@@ -283,22 +277,6 @@ class GraphBuilder:
                 "y_range": [min(yTickVals), max(yTickVals)],
             },
         )
-
-        return fig
-
-    def post_process_station_mode(self, fig, query, wtt, parser):
-        if query.type != FilterType.STATION:
-            return fig
-
-        fig.update_layout(
-            scene_camera=dict(eye=dict(x=0, y=0, z=1.5)),
-            scene=dict(aspectratio=dict(x=3, y=1.5, z=1.2)),
-        )
-
-        for i, rc in enumerate(wtt.rakecycles):
-            for svc in rc.servicePath:
-                if i < len(wtt.rakecycles) / 2 + 10:
-                    svc.needsACRake = True
 
         return fig
 
@@ -370,72 +348,6 @@ class GraphBuilder:
                 trace.opacity = 0.15 if selected_set else 1
                 trace.hoverinfo = "skip" if selected_set else "text"
 
-    def highlight_stations(self, fig, station_names):
-        """Highlight events at selected stations, dim everything else.
-
-        Zooms both Y-axis (distance) and X-axis (time) to the selected stations.
-        """
-        st_set = {s.strip().upper() for s in station_names}
-        matched_times = []
-
-        for trace in fig.data:
-            if trace.name == "__focus":
-                continue  # preserve focus rings
-            hover = trace.hovertext
-            if hover is None or len(hover) == 0:
-                trace.opacity = 0.15
-                continue
-
-            # Scatter3d marker.opacity is scalar only, so use per-point
-            # color with alpha to achieve per-point dimming
-            sizes = []
-            colors = []
-            # Determine color from trace meta
-            is_ac = isinstance(trace.meta, dict) and trace.meta.get("ac", False)
-            if is_ac:
-                r, g, b = 66, 133, 244
-            else:
-                r, g, b = 90, 90, 90
-
-            x_vals = trace.x if trace.x is not None else []
-            for i, h in enumerate(hover):
-                if h and any(st in h.upper() for st in st_set):
-                    sizes.append(5)
-                    colors.append(f"rgba({r},{g},{b},1.0)")
-                    if i < len(x_vals) and x_vals[i] is not None:
-                        matched_times.append(x_vals[i])
-                else:
-                    sizes.append(1)
-                    colors.append(f"rgba({r},{g},{b},0.07)")
-
-            trace.marker.size = sizes
-            trace.marker.color = colors
-            trace.line.color = f"rgba({r},{g},{b},0.05)"
-
-        # Zoom Y-axis to selected stations' distance range
-        dists = [DISTANCE_MAP[st] for st in st_set if st in DISTANCE_MAP]
-        if dists:
-            y_min = min(dists)
-            y_max = max(dists)
-            pad = max(3, (y_max - y_min) * 0.15)
-            fig.update_layout(scene_yaxis_range=[y_min - pad, y_max + pad])
-
-        # Zoom X-axis to time range of matched events
-        if matched_times:
-            x_min = min(matched_times)
-            x_max = max(matched_times)
-            x_pad = max(15, (x_max - x_min) * 0.05)
-            x_start = x_min - x_pad
-            x_end = x_max + x_pad
-            tick_step = 60 if (x_end - x_start) < 600 else 120
-            ticks = list(range(int(x_start) - int(x_start) % tick_step, int(x_end) + tick_step, tick_step))
-            tick_labels = [f"{(t // 60) % 24:02d}:{t % 60:02d}" for t in ticks]
-            fig.update_layout(
-                scene_xaxis_range=[x_start, x_end],
-                scene_xaxis_tickvals=ticks,
-                scene_xaxis_ticktext=tick_labels,
-            )
-
     def highlight_links(self, fig, selected_links):
         """
         Highlight one or more rake links in the visualization.
@@ -493,111 +405,6 @@ class GraphBuilder:
                 ),
             )
         ]
-
-    def focus_event(self, fig, targets):
-        """Add circle-open overlay(s) on specific event(s) and zoom X-axis.
-
-        Args:
-            fig: Plotly figure
-            targets: list of (time_raw, station_name) tuples
-        """
-        if not targets:
-            return
-
-        matched_points = []
-        for time_raw, station_name in targets:
-            st_upper = station_name.strip().upper()
-            for trace in fig.data:
-                if trace.name == "__focus":
-                    continue
-                hover = trace.hovertext
-                if hover is None or len(hover) == 0:
-                    continue
-                x_vals = trace.x if trace.x is not None else []
-                y_vals = trace.y if trace.y is not None else []
-                z_vals = trace.z if trace.z is not None else []
-                found = False
-                for i, h in enumerate(hover):
-                    if h is None or i >= len(x_vals) or x_vals[i] is None:
-                        continue
-                    if st_upper in str(h).upper() and abs(x_vals[i] - time_raw) < 1.0:
-                        matched_points.append((x_vals[i], y_vals[i], z_vals[i]))
-                        found = True
-                        break
-                if found:
-                    break
-
-        if not matched_points:
-            return
-
-        # Remove existing focus trace
-        fig.data = [t for t in fig.data if t.name != "__focus"]
-
-        fig.add_trace(go.Scatter3d(
-            x=[p[0] for p in matched_points],
-            y=[p[1] for p in matched_points],
-            z=[p[2] for p in matched_points],
-            mode="markers",
-            marker=dict(
-                size=14,
-                symbol="circle-open",
-                color="rgba(255,255,255,0.85)",
-                line=dict(width=2, color="rgba(255,255,255,0.85)"),
-            ),
-            name="__focus",
-            showlegend=False,
-            hoverinfo="skip",
-        ))
-
-        # Zoom X-axis to encompass all matched events +/-30min
-        x_times = [p[0] for p in matched_points]
-        x_start = min(x_times) - 30
-        x_end = max(x_times) + 30
-        tick_step = 10
-        ticks = list(range(int(x_start) - int(x_start) % tick_step, int(x_end) + tick_step, tick_step))
-        tick_labels = [f"{(t // 60) % 24:02d}:{t % 60:02d}" for t in ticks]
-        fig.update_layout(
-            scene_xaxis_range=[x_start, x_end],
-            scene_xaxis_tickvals=ticks,
-            scene_xaxis_ticktext=tick_labels,
-        )
-
-    def reset_station_highlight(self, fig):
-        """Reset all traces to default appearance, remove focus overlay."""
-        # Remove focus trace
-        fig.data = [t for t in fig.data if t.name != "__focus"]
-
-        for trace in fig.data:
-            hover = trace.hovertext
-            if hover is None or len(hover) == 0:
-                trace.opacity = 1.0
-                continue
-
-            # Determine original color from trace meta
-            is_ac = isinstance(trace.meta, dict) and trace.meta.get("ac", False)
-            if is_ac:
-                r, g, b = 66, 133, 244
-            else:
-                r, g, b = 90, 90, 90
-
-            color = f"rgba({r},{g},{b},0.8)"
-            trace.marker.size = 2
-            trace.marker.color = color
-            trace.line.color = color
-
-        # Reset axis ranges to original build-time values stored in layout.meta
-        meta = fig.layout.meta if isinstance(fig.layout.meta, dict) else {}
-        x_range = meta.get("x_range", [165, 1605])
-        x_ticks = meta.get("x_tickvals", list(range(165, 1606, 120)))
-        x_labels = meta.get("x_ticktext", [f"{(t // 60) % 24:02d}:{t % 60:02d}" for t in range(165, 1606, 120)])
-        y_range = meta.get("y_range", [min(DISTANCE_MAP.values()), max(DISTANCE_MAP.values())])
-
-        fig.update_layout(
-            scene_xaxis_range=x_range,
-            scene_xaxis_tickvals=x_ticks,
-            scene_xaxis_ticktext=x_labels,
-            scene_yaxis_range=y_range,
-        )
 
     def reset_isolation(self, fig, wtt):
         for rc in wtt.rakecycles:
